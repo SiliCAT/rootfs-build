@@ -27,6 +27,12 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(target["execution"], "native")
         self.assertIn("@sha256:", target["builder_image"])
 
+    def test_registered_proxmox_target(self):
+        target = TARGET.resolve("amd64-trixie-proxmox")
+        self.assertEqual(target["artifact_name"], "rootfs-trixie-amd64-proxmox")
+        self.assertEqual(target["recipe"], "recipes/amd64/trixie/proxmox/recipe.sh")
+        self.assertEqual(target["platform"], "linux/amd64")
+
     def test_unknown_target_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown target"):
             TARGET.resolve("unregistered-target")
