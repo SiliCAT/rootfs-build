@@ -9,11 +9,11 @@
     "execution": "native",
     "builder_image": "debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"
   },
-  "amd64-trixie-proxmox": {
+  "amd64-trixie-vm-incusd": {
     "architecture": "amd64",
     "suite": "trixie",
-    "name": "proxmox",
-    "recipe": "recipes/amd64/trixie/proxmox/recipe.sh",
+    "name": "vm-incusd",
+    "recipe": "recipes/amd64/trixie/vm-incusd/recipe.sh",
     "runner": "ubuntu-24.04",
     "platform": "linux/amd64",
     "execution": "native",

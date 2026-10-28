@@ -1,6 +1,6 @@
-# proxmox：Debian Trixie / amd64 / Incus 与来宾工具
+# vm-incusd：Debian Trixie / amd64 / Incus 与来宾工具
 
-这是独立的完整 rootfs 配方，目标 ID 为 `amd64-trixie-proxmox`。
+这是独立的完整 rootfs 配方，目标 ID 为 `amd64-trixie-vm-incusd`。
 包集、源、配置及收尾都在 `recipe.sh` 中定义，没有配方继承。
 使用 Debian 官方软件源和 `linux-image-amd64`，没有引入 PVE 仓库或专用内核。
 
@@ -10,11 +10,11 @@
 
 ```sh
 sudo -n scripts/build-rootfs.sh \
-  --recipe recipes/amd64/trixie/proxmox/recipe.sh \
-  --output outputs/rootfs-trixie-amd64-proxmox.tar.zst
+  --recipe recipes/amd64/trixie/vm-incusd/recipe.sh \
+  --output outputs/rootfs-trixie-amd64-vm-incusd.tar.zst
 ```
 
-也可在 Actions 的 **Build rootfs → Run workflow** 中选择 `amd64-trixie-proxmox`。
+也可在 Actions 的 **Build rootfs → Run workflow** 中选择 `amd64-trixie-vm-incusd`。
 继续使用现有构建容器、私有挂载命名空间、归档外壳和产物记录导出。
 
 配方只接收一个绝对、真实、可写的空 `TARGET_ROOT`；它不安装 builder 工具，不创建
@@ -43,7 +43,7 @@ mmdebstrap 使用 `root` 模式、`directory` 输出和 `minbase`。
 
 ## 仅构建期间的裁剪
 
-APT 临时片段为 `/etc/apt/apt.conf.d/90-proxmox-build`，关闭语言索引、Recommends 和
+APT 临时片段为 `/etc/apt/apt.conf.d/90-vm-incusd-build`，关闭语言索引、Recommends 和
 Suggests。DPKG 通过原生 `--dpkgopt` 写入 `/etc/dpkg/dpkg.cfg.d/99mmdebstrap`，排除：
 
 ```text

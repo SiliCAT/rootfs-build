@@ -16,8 +16,8 @@
 ```sh
 sudo -n scripts/build-rootfs.sh \
   --recipe transforms/trixie/br-initrd/recipe.sh \
-  --input-rootfs /absolute/input/rootfs-trixie-amd64-proxmox.tar.zst \
-  --output /absolute/output/rootfs-trixie-amd64-proxmox-br-initrd.tar.zst
+  --input-rootfs /absolute/input/rootfs-trixie-amd64-vm-incusd.tar.zst \
+  --output /absolute/output/rootfs-trixie-amd64-vm-incusd-br-initrd.tar.zst
 ```
 
 配方的位置参数是 `TARGET_ROOT INPUT_ARCHIVE`。目标是外壳提供的空绝对路径，

@@ -31,7 +31,7 @@ class TransformTests(unittest.TestCase):
                     "head_repository": {"full_name": "SiliCAT/rootfs-build"},
                     "path": ".github/workflows/rootfs.yml", "head_sha": "a" * 40, "run_attempt": 2}
         self.artifact = {"id": 456, "expired": False, "workflow_run": {"id": 123},
-                         "name": "rootfs-trixie-amd64-proxmox-123-1", "digest": None}
+                         "name": "rootfs-trixie-amd64-vm-incusd-123-1", "digest": None}
         self.source = self.inspect()
         self.directory = self.base / "input"
         self.directory.mkdir()
@@ -81,8 +81,8 @@ class TransformTests(unittest.TestCase):
 
     def test_artifact_cannot_be_expired_foreign_logs_or_an_unknown_attempt(self):
         for changes in ({"expired": True}, {"workflow_run": {"id": 999}},
-                        {"name": "logs-rootfs-trixie-amd64-proxmox-123-1"},
-                        {"name": "rootfs-trixie-amd64-proxmox-123-3"}):
+                        {"name": "logs-rootfs-trixie-amd64-vm-incusd-123-1"},
+                        {"name": "rootfs-trixie-amd64-vm-incusd-123-3"}):
             with self.subTest(changes=changes):
                 original = self.artifact
                 self.artifact = dict(original, **changes)
@@ -104,9 +104,9 @@ class TransformTests(unittest.TestCase):
     def test_derived_identity_uses_shared_recipe_and_retains_base_architecture(self):
         derived = TRANSFORM.derived_target(self.source)
         self.assertEqual(derived["architecture"], "amd64")
-        self.assertEqual(derived["id"], "amd64-trixie-proxmox-br-initrd")
+        self.assertEqual(derived["id"], "amd64-trixie-vm-incusd-br-initrd")
         self.assertEqual(derived["recipe"], "transforms/trixie/br-initrd/recipe.sh")
-        self.assertEqual(self.source["base_target"]["name"], "proxmox")
+        self.assertEqual(self.source["base_target"]["name"], "vm-incusd")
 
     def test_checksum_corruption_is_rejected_before_execution(self):
         self.archive.write_bytes(b"corrupt")

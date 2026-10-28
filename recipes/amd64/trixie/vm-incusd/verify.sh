@@ -6,9 +6,9 @@ set -euo pipefail
     exit 2
 }
 root=$1
-fail() { printf '[PROXMOX VERIFY][ERR] %s\n' "$1" >&2; exit 95; }
+fail() { printf '[VM-INCUSD VERIFY][ERR] %s\n' "$1" >&2; exit 95; }
 
-for path in etc/apt/apt.conf.d/90-proxmox-build etc/apt/apt.conf.d/99mmdebstrap \
+for path in etc/apt/apt.conf.d/90-vm-incusd-build etc/apt/apt.conf.d/99mmdebstrap \
     etc/dpkg/dpkg.cfg.d/99mmdebstrap etc/build-meta usr/sbin/policy-rc.d \
     var/lib/dbus/machine-id var/lib/systemd/random-seed var/lib/incus var/log/journal; do
     [[ ! -e $root/$path && ! -L $root/$path ]] || fail "unexpected build or runtime state: $path"
@@ -84,4 +84,4 @@ for modules in "$root"/lib/modules/*; do
     kernel_count=$((kernel_count + 1))
 done
 (( kernel_count > 0 )) || fail 'no target kernels found'
-printf '[PROXMOX VERIFY] package, locale, policy, cleanup and kernel checks passed\n'
+printf '[VM-INCUSD VERIFY] package, locale, policy, cleanup and kernel checks passed\n'

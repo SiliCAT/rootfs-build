@@ -14,12 +14,12 @@ import unittest
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-RECIPE = REPOSITORY / "recipes/amd64/trixie/proxmox/recipe.sh"
+RECIPE = REPOSITORY / "recipes/amd64/trixie/vm-incusd/recipe.sh"
 
 
-class ProxmoxRecipeTests(unittest.TestCase):
+class VmIncusdRecipeTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="proxmox-recipe-tests-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="vm-incusd-recipe-tests-")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.root = self.base / "target with space\nand newline"
@@ -31,15 +31,15 @@ class ProxmoxRecipeTests(unittest.TestCase):
         self.executable(tools / "mmdebstrap", '''#!/usr/bin/env python3
 import json,os,sys
 from pathlib import Path
-Path(os.environ['PROXMOX_TEST_CAPTURE']).write_text(json.dumps({
+Path(os.environ['VM_INCUSD_TEST_CAPTURE']).write_text(json.dumps({
     'args': sys.argv[1:],
-    'apt': os.environ['PROXMOX_BUILD_APT_CONFIG'],
-    'dpkg': os.environ['PROXMOX_BUILD_DPKG_CONFIG'],
+    'apt': os.environ['VM_INCUSD_BUILD_APT_CONFIG'],
+    'dpkg': os.environ['VM_INCUSD_BUILD_DPKG_CONFIG'],
 }))
 raise SystemExit(37)
 ''')
         self.environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"],
-                                PROXMOX_TEST_CAPTURE=str(self.base / "capture.json"))
+                                VM_INCUSD_TEST_CAPTURE=str(self.base / "capture.json"))
         result = subprocess.run([str(RECIPE), str(self.root)], env=self.environment,
                                 cwd="/", text=True, capture_output=True, timeout=5)
         self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
@@ -56,7 +56,7 @@ raise SystemExit(37)
         return [arg.split("=", 1)[1] for arg in self.args if arg.startswith(f"--{name}-hook=")]
 
     def config_fixture(self):
-        apt = self.root / "etc/apt/apt.conf.d/90-proxmox-build"
+        apt = self.root / "etc/apt/apt.conf.d/90-vm-incusd-build"
         dpkg = self.root / "etc/dpkg/dpkg.cfg.d/99mmdebstrap"
         for path, contents in [(apt, self.capture["apt"]), (dpkg, self.capture["dpkg"])]:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,8 +64,8 @@ raise SystemExit(37)
         return apt, dpkg
 
     def run_cleanup(self):
-        environment = dict(self.environment, PROXMOX_BUILD_APT_CONFIG=self.capture["apt"],
-                           PROXMOX_BUILD_DPKG_CONFIG=self.capture["dpkg"])
+        environment = dict(self.environment, VM_INCUSD_BUILD_APT_CONFIG=self.capture["apt"],
+                           VM_INCUSD_BUILD_DPKG_CONFIG=self.capture["dpkg"])
         return subprocess.run(["sh", "-c", self.cleanup, "hook", str(self.root)],
                               env=environment, text=True, capture_output=True, timeout=5)
 

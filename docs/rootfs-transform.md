@@ -2,7 +2,7 @@
 
 入口是 **Actions → Transform rootfs → Run workflow**。第一版只消费本仓库
 `Build rootfs`（`.github/workflows/rootfs.yml`）成功运行产生的基础产物，支持
-memini 和 proxmox 的 Debian Trixie / amd64 归档。不会重新执行基础构建。
+memini 和 vm-incusd 的 Debian Trixie / amd64 归档。不会重新执行基础构建。
 
 ## 选择输入
 
@@ -21,7 +21,7 @@ gh api repos/SiliCAT/rootfs-build/actions/runs/RUN_ID/artifacts \
 ```
 
 将 `RUN_ID` 换成实际数字。选择形如
-`rootfs-trixie-amd64-proxmox-RUN_ID-ATTEMPT` 的 rootfs 产物。产物 ID 精确锁定某次
+`rootfs-trixie-amd64-vm-incusd-RUN_ID-ATTEMPT` 的 rootfs 产物。产物 ID 精确锁定某次
 尝试，不隐式寻找“最新”。当前基础产物保留 14 天，过期后需要新的基础构建。
 新入口提交到默认分支后才会出现在 Actions 的手动运行列表中。
 
@@ -48,14 +48,14 @@ gh api repos/SiliCAT/rootfs-build/actions/runs/RUN_ID/artifacts \
 
 ## 输出和来源
 
-对于 proxmox 输入，结果为：
+对于 vm-incusd 输入，结果为：
 
 ```text
-rootfs-trixie-amd64-proxmox-br-initrd.tar.zst
-rootfs-trixie-amd64-proxmox-br-initrd.tar.zst.sha256
-rootfs-trixie-amd64-proxmox-br-initrd.packages.tsv
-rootfs-trixie-amd64-proxmox-br-initrd.build.json
-rootfs-trixie-amd64-proxmox-br-initrd.SHA256SUMS
+rootfs-trixie-amd64-vm-incusd-br-initrd.tar.zst
+rootfs-trixie-amd64-vm-incusd-br-initrd.tar.zst.sha256
+rootfs-trixie-amd64-vm-incusd-br-initrd.packages.tsv
+rootfs-trixie-amd64-vm-incusd-br-initrd.build.json
+rootfs-trixie-amd64-vm-incusd-br-initrd.SHA256SUMS
 ```
 
 memini 使用对应的基础名称。主产物保留 14 天，诊断日志保留 7 天。

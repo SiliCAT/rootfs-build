@@ -1,7 +1,7 @@
 # GitHub Actions：amd64 rootfs 构建
 
 当前入口是 `.github/workflows/rootfs.yml`，在 Actions 页面显示为 **Build rootfs**。
-目前只有手动触发，可选 `amd64-trixie-memini` 和 `amd64-trixie-proxmox`，
+目前只有手动触发，可选 `amd64-trixie-memini` 和 `amd64-trixie-vm-incusd`，
 每次构建一个目标，不会自动推送 Release 或发布环境。
 
 ## 在 GitHub 上运行
@@ -25,7 +25,7 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | `scripts/run-target.sh` | 连接目标登记、归档外壳和构建记录导出 |
 | `scripts/target.py` | 校验目标、生成包版本与构建信息、导出指定日志 |
 | `recipes/amd64/trixie/memini/recipe.sh` | 独立的设备配方，继续拥有包集、配置和收尾 |
-| `recipes/amd64/trixie/proxmox/recipe.sh` | 独立的 Incus/来宾配方，包含仅构建期间生效的裁剪 |
+| `recipes/amd64/trixie/vm-incusd/recipe.sh` | 独立的 Incus/来宾配方，包含仅构建期间生效的裁剪 |
 
 目标解析只接受登记的条目，不把输入当脚本、路径或 shell 片段执行。第一版明确支持
 原生 amd64；其他架构、QEMU 和其他 runner 会被拒绝，不能仅添加一个登记就宣称已支持。
@@ -68,7 +68,7 @@ rootfs-trixie-amd64-memini.build.json
 rootfs-trixie-amd64-memini.SHA256SUMS
 ```
 
-选择 proxmox 时，文件名中的 `memini` 对应改为 `proxmox`。配方的 `verify.sh` 会在
+选择 vm-incusd 时，文件名中的 `memini` 对应改为 `vm-incusd`。配方的 `verify.sh` 会在
 归档前自动执行，不需要给共用工作流添加设备专用步骤。
 
 `packages.tsv` 记录最终安装的包、版本和架构，不包括仅残留配置的已卸载包。

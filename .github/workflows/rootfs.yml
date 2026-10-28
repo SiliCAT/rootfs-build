@@ -10,7 +10,7 @@ on:
         default: amd64-trixie-memini
         options:
           - amd64-trixie-memini
-          - amd64-trixie-proxmox
+          - amd64-trixie-vm-incusd
 
 permissions:
   contents: read
