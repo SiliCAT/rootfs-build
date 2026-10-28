@@ -9,7 +9,7 @@
 1. 将代码提交并合入仓库默认分支，使 GitHub 能发现 `workflow_dispatch` 入口。
 2. 打开仓库的 **Actions → Build rootfs → Run workflow**。
 3. 选择需要构建的分支和目标，启动构建。
-4. 在该次运行的 Artifacts 中下载成功产物及日志。
+4. 在该次运行的 Summary 中查看主产物链接和加工参数，在 Artifacts 中下载产物及日志。
 
 此流程不需要额外的仓库 secret。检出只申请 `contents: read`，使用 Actions 自带的
 artifact 上传身份；不将 GitHub token 传入构建容器。
@@ -24,6 +24,7 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | `scripts/prepare-builder.sh` | 在 Debian builder 内安装并检查构建工具 |
 | `scripts/run-target.sh` | 连接目标登记、归档外壳和构建记录导出 |
 | `scripts/target.py` | 校验目标、生成包版本与构建信息、导出指定日志 |
+| `scripts/artifact-reference.py` | 主产物上传后生成运行摘要和诊断包中的 JSON 回执 |
 | `recipes/amd64/trixie/memini/recipe.sh` | 独立的设备配方，继续拥有包集、配置和收尾 |
 | `recipes/amd64/trixie/vm-incusd/recipe.sh` | 独立的 Incus/来宾配方，包含仅构建期间生效的裁剪 |
 
@@ -86,6 +87,37 @@ artifact 的额外压缩关闭，文件元数据保留在 tar 内。解包说明
 固定 builder 不等于整个系统可逐字节复现：目标 APT 源仍会更新。包版本清单用于追溯
 实际安装结果；快照软件源和版本冻结可以作为后续独立改进。
 
+## 运行摘要与产物回执
+
+主 rootfs artifact 上传成功后，同一个脚本提供两个出口：
+
+- **运行详情 → Summary**：显示目标、源码提交、run ID、尝试次数、主产物 artifact ID、
+  名称、运行和下载链接、归档 SHA-256 及 Actions 产物 digest。基础构建摘要顶部还提供
+  可直接复制到 **Transform rootfs → Run workflow** 的 `source_run_id` 和 `source_artifact_id`。
+- **诊断产物中的 `artifact-reference.json`**：保存同样的机器可读信息。文件在诊断 ZIP
+  根目录，而不是 rootfs 归档或主产物 ZIP 中；它指向主 rootfs artifact，不指向日志 artifact。
+
+收尾顺序是：导出诊断 → 上传主产物 → 生成摘要与 JSON → 上传诊断包。
+artifact ID 由上传 action 返回，生成前会检查它与下载 URL、当前运行及构建记录一致。
+回执只读取现有 `.build.json`，不修改已经上传的五个文件，也不增加仓库写权限或网络请求。
+
+JSON 格式版本是 `schema_version: 1`，基础构建使用 `kind: "base"`，主要字段如下：
+
+| 字段 | 含义 |
+| --- | --- |
+| `repository`、`target`、`source_commit` | 本次运行的仓库、目标 ID 和源码提交 |
+| `run_id`、`run_attempt`、`run_url` | 本次运行、尝试次数和运行链接，两个数字字段为整数 |
+| `artifact_id`、`artifact_name`、`artifact_url` | 主 rootfs artifact 的 ID、名称和下载链接 |
+| `artifact_digest` | 整个 Actions artifact 的 digest，统一为 `sha256:` 加十六进制值 |
+| `archive`、`archive_sha256` | artifact 内 `.tar.zst` 文件名及其 SHA-256，后者不含前缀 |
+
+Actions artifact digest 与 `.tar.zst` SHA-256 对应不同对象，不应混用。
+回执随诊断包保留 7 天；主产物保留 14 天。
+
+主产物上传失败或跳过时，不生成有效回执，诊断上传仍按原有 `always()` 条件尝试执行。
+请确认该次运行整体为 **Success** 后再使用复制的参数；加工入口会检查来源运行的状态。
+生成回执失败会使作业失败，随后仍尝试上传诊断。
+
 ## 日志与失败
 
 镜像拉取和资源检查分别保留 pull、disk、memory 日志。容器标准输出会实时写入 Actions
@@ -106,7 +138,8 @@ runner 外部文件的符号链接。导出日志供 runner 读取时，只调�
 python3 -m unittest discover -s tests -v
 ```
 
-测试包括真实微型归档往返、失败/取消、并发、挂载检测、目标校验、包清单和日志导出。
+测试包括真实微型归档往返、失败/取消、并发、挂载检测、目标校验、包清单和日志导出，
+以及回执 CLI、摘要/JSON 一致性、上传输出校验和基础输入与加工输出的区分。
 完整 memini 构建应在具备所需权限与网络信任的 Debian 容器中验证；实际 GitHub 上的
 检出、运行和 artifact 上传则以对应的 Actions 运行结果为准。
 

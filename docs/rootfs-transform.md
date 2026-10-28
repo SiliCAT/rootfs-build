@@ -6,13 +6,20 @@ memini 和 vm-incusd 的 Debian Trixie / amd64 归档。不会重新执行基础
 
 ## 选择输入
 
+首选从成功的 **Build rootfs** 运行详情的 **Summary** 页面复制
+“供 Transform rootfs 使用”中的两个参数；同样的信息也保存在该次诊断产物 ZIP
+根目录的 `artifact-reference.json`，其中 `kind` 为 `base`。
+将回执的 `run_id` 填入 `source_run_id`，`artifact_id` 填入 `source_artifact_id`。
+
 填写两个必填项：
 
 - `source_run_id`：成功基础构建的运行 ID，即运行详情 URL 中 `actions/runs/` 后的数字。
 - `source_artifact_id`：该运行中 rootfs 产物的 ID，不能填日志产物 ID。
   运行详情页中产物链接的 `artifacts/` 后是产物 ID。
 
-也可用已登录的 GitHub CLI 查询，不需要创建新 secret：
+对于没有新摘要的旧运行，可展开 **build / build → Upload rootfs and build records**，
+查看 `Artifact ID` 或 `Artifact download URL`；也可用已登录的 GitHub CLI 查询，
+不需要创建新 secret：
 
 ```sh
 gh run list --repo SiliCAT/rootfs-build --workflow rootfs.yml --status success
@@ -40,7 +47,8 @@ gh api repos/SiliCAT/rootfs-build/actions/runs/RUN_ID/artifacts \
    仓库和输入目录只读挂载；token 只用于宿主机的下载步骤，不传给 builder。
 6. 共享配方解包、注入、重建、清理并回读验收。沿用通用外壳的私有挂载命名空间、
    进程取消处理、无覆盖发布、归档比较和校验流程。
-7. 从最终 rootfs 重新导出包清单和构建记录，成功时上传完整产物，单独上传诊断日志。
+7. 从最终 rootfs 重新导出包清单和构建记录，成功时上传完整产物。
+8. 主产物上传成功后生成运行摘要和 `logs/artifact-reference.json`，随后单独上传诊断日志。
 
 加工业务保存在 [共享配方](../transforms/trixie/br-initrd/recipe.sh)，架构调度表位于
 `scripts/transform.py` 的 `BACKENDS`。增加架构需要验证对应执行后端和实际输入系统，
@@ -67,6 +75,23 @@ memini 使用对应的基础名称。主产物保留 14 天，诊断日志保留
 
 失败诊断包含下载日志、构建日志、可用的包操作/DKMS 日志、来源描述和已生成的
 验收记录。失败不上传 rootfs 主产物，重试使用新的工作目录。
+
+## 加工结果的两个回执出口
+
+**Summary** 将“本次加工输出”和“基础输入（来源）”分开展示：前者的 run/artifact ID
+属于本次新产物，后者属于被消费的基础构建。当前加工入口只接受成功的基础构建，
+不能把“本次加工输出”的 ID 再填为基础输入，因此加工摘要不提供输出 ID 的加工参数复制块。
+
+诊断 ZIP 根目录也包含 `artifact-reference.json`。其格式为 `schema_version: 1`、
+`kind: "transform"`；顶层字段描述本次加工输出，`input` 对象描述基础来源。两部分均包含
+目标、仓库、源码提交、run ID、尝试号、运行链接、artifact ID、名称、下载链接、
+artifact digest、归档名及归档 SHA-256。输入的 artifact digest 若原始 API 未提供则为
+`null`，摘要显示“未提供”，不推测一个值。
+
+公共字段说明见 [基础构建的回执格式](github-actions.md#运行摘要与产物回执)。
+两个出口共用 `scripts/artifact-reference.py`，在 runner 上执行，不需要 GitHub token 或
+写仓库权限。上传失败或跳过时不生成回执，诊断仍尝试上传；已经上传的主产物及构建记录
+保持原样，输入校验仍要求五个基础文件。
 
 ## 本地复用已验证的下载目录
 
