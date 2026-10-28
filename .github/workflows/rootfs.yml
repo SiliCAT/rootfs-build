@@ -1,0 +1,25 @@
+name: Build rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Registered rootfs target
+        required: true
+        type: choice
+        default: amd64-trixie-memini
+        options:
+          - amd64-trixie-memini
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rootfs-${{ github.workflow }}-${{ inputs.target }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/rootfs-build.yml
+    with:
+      target: ${{ inputs.target }}

@@ -1,0 +1,12 @@
+{
+  "amd64-trixie-memini": {
+    "architecture": "amd64",
+    "suite": "trixie",
+    "name": "memini",
+    "recipe": "recipes/amd64/trixie/memini/recipe.sh",
+    "runner": "ubuntu-24.04",
+    "platform": "linux/amd64",
+    "execution": "native",
+    "builder_image": "debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"
+  }
+}
