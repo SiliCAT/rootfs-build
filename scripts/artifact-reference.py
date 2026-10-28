@@ -124,8 +124,7 @@ def render_summary(reference):
         return (
             "## 基础 rootfs 产物\n\n主 rootfs 产物已上传。\n\n"
             "### 供 Transform rootfs 使用\n\n"
-            f"```text\nsource_run_id:      {reference['run_id']}\n"
-            f"source_artifact_id: {reference['artifact_id']}\n```\n\n"
+            f"```text\nsource_artifact_id: {reference['artifact_id']}\n```\n\n"
             + reference_table(reference)
         )
     return (

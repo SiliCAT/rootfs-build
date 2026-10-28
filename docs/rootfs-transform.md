@@ -4,22 +4,44 @@
 `Build rootfs`（`.github/workflows/rootfs.yml`）成功运行产生的基础产物，支持
 memini 和 vm-incusd 的 Debian Trixie / amd64 归档。不会重新执行基础构建。
 
-## 选择输入
+## 查询候选并选择输入
 
-首选从成功的 **Build rootfs** 运行详情的 **Summary** 页面复制
-“供 Transform rootfs 使用”中的两个参数；同样的信息也保存在该次诊断产物 ZIP
-根目录的 `artifact-reference.json`，其中 `kind` 为 `base`。
-将回执的 `run_id` 填入 `source_run_id`，`artifact_id` 填入 `source_artifact_id`。
+1. 打开 **Actions → List rootfs inputs → Run workflow**，选择当前分支并运行。
+2. 完成后打开该次运行的 **Summary**，查看可用基础 rootfs 候选表。
+3. 复制所选行的 **Artifact ID**。
+4. 打开 **Actions → Transform rootfs → Run workflow**，只填写 `source_artifact_id`。
 
-填写两个必填项：
+加工入口从 artifact 的 API 元数据自动解析 run ID，再执行现有来源校验。
+不自动选择“最新产物”，也不会在选中的产物失效时替换为其他输入。
+内部来源描述、构建记录及回执仍保留 run ID，便于追溯；只是用户不再需要手工填写。
 
-- `source_run_id`：成功基础构建的运行 ID，即运行详情 URL 中 `actions/runs/` 后的数字。
-- `source_artifact_id`：该运行中 rootfs 产物的 ID，不能填日志产物 ID。
-  运行详情页中产物链接的 `artifacts/` 后是产物 ID。
+候选表包含目标、创建时间（UTC）、源码提交、run ID、尝试次数、artifact ID、
+运行链接和下载链接。列出当前登记的全部目标，最多显示按创建时间从新到旧排序的
+20 项；只接受本仓库成功基础构建及成功尝试产生的、尚未过期且架构受支持的主产物。
+日志产物、加工结果和已经移除的目标名称不会进入候选表。
+
+查询通过受控分页读取仓库的产物 API，每页 100 条，最多 10 页，再筛选、排序并展示
+已扫描范围内最新的最多 20 项。达到扫描上限时 Summary 会明确提示清单覆盖范围；
+已知有效 ID 仍可直接填写。没有候选时明确显示“没有可用基础产物”；API 查询、权限
+或网络错误则使查询作业失败，不伪装成空清单。
+
+查询只读取 API 元数据，不下载大型 rootfs，不启动 builder，不需要特权或仓库写权限。
+同一个 run 及其尝试的查询会复用结果。诊断包中的 JSON 回执不是候选发现的前提，
+因此诊断包 7 天的保留期限不会遮蔽仍在 14 天保留期内的主产物。
+
+候选是查询时的快照。加工启动及下载前会重新核对来源和有效期；下载后继续检查
+ZIP digest、五个基础文件、校验清单和构建记录，候选列表不替代这些验收。
+
+## 已知产物的直接输入
+
+也可从成功的 **Build rootfs** 运行详情 **Summary** 顶部的
+“供 Transform rootfs 使用”复制 `source_artifact_id`，无需先运行候选查询。
+相同的 ID 保存在诊断 ZIP 根目录 `artifact-reference.json` 的 `artifact_id` 字段中。
 
 对于没有新摘要的旧运行，可展开 **build / build → Upload rootfs and build records**，
-查看 `Artifact ID` 或 `Artifact download URL`；也可用已登录的 GitHub CLI 查询，
-不需要创建新 secret：
+查看 `Artifact ID` 或 `Artifact download URL`；运行详情产物链接的 `artifacts/` 后
+也是 artifact ID。请选择主 rootfs 产物，不选择 `logs-` 产物。
+也可用已登录的 GitHub CLI 查询，不需要创建新 secret：
 
 ```sh
 gh run list --repo SiliCAT/rootfs-build --workflow rootfs.yml --status success
@@ -28,13 +50,14 @@ gh api repos/SiliCAT/rootfs-build/actions/runs/RUN_ID/artifacts \
 ```
 
 将 `RUN_ID` 换成实际数字。选择形如
-`rootfs-trixie-amd64-vm-incusd-RUN_ID-ATTEMPT` 的 rootfs 产物。产物 ID 精确锁定某次
-尝试，不隐式寻找“最新”。当前基础产物保留 14 天，过期后需要新的基础构建。
-新入口提交到默认分支后才会出现在 Actions 的手动运行列表中。
+`rootfs-trixie-amd64-vm-incusd-RUN_ID-ATTEMPT` 的 rootfs 产物。
+artifact ID 精确锁定一次上传，不隐式寻找“最新”。过期后需要新的基础构建。
+新工作流入口提交到默认分支后才会出现在 Actions 的手动运行列表中。
 
 ## 执行流程
 
-1. 使用工作流自带、只读 `GITHUB_TOKEN` 查询运行和产物元数据，校验同一仓库、
+1. 使用工作流自带、只读 `GITHUB_TOKEN` 根据 artifact ID 查询所属 run ID，
+   再校验运行和产物元数据，确认同一仓库、
    成功完成的基础工作流、产物归属、名称、尝试号和未过期状态。
 2. 根据输入架构选择经过验证的原生 runner 和固定 digest 的 Debian builder。
    当前只登记 amd64；未知架构明确失败，不回退到 amd64 或自动开启 QEMU。
@@ -89,7 +112,7 @@ artifact digest、归档名及归档 SHA-256。输入的 artifact digest 若原�
 `null`，摘要显示“未提供”，不推测一个值。
 
 公共字段说明见 [基础构建的回执格式](github-actions.md#运行摘要与产物回执)。
-两个出口共用 `scripts/artifact-reference.py`，在 runner 上执行，不需要 GitHub token 或
+两个回执出口共用 `scripts/artifact-reference.py`，在 runner 上执行，不需要 GitHub token 或
 写仓库权限。上传失败或跳过时不生成回执，诊断仍尝试上传；已经上传的主产物及构建记录
 保持原样，输入校验仍要求五个基础文件。
 

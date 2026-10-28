@@ -1,6 +1,8 @@
 """Artifact selection, input integrity and final transform provenance without network."""
 
 import importlib.util
+from datetime import datetime, timezone
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -240,6 +242,221 @@ class TransformTests(unittest.TestCase):
         image.write_bytes(b"unexpected later modification")
         with self.assertRaisesRegex(ValueError, "changed after verification"):
             TRANSFORM.export_transform(self.directory, root, output, report)
+
+
+class InputCatalogTests(unittest.TestCase):
+    def setUp(self):
+        self.repository = "SiliCAT/rootfs-build"
+        self.now = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
+        self.run = {"id": 123, "status": "completed", "conclusion": "success",
+                    "repository": {"full_name": self.repository},
+                    "head_repository": {"full_name": self.repository},
+                    "path": ".github/workflows/rootfs.yml", "head_sha": "a" * 40,
+                    "run_attempt": 2}
+        self.artifact = {"id": 456, "expired": False, "workflow_run": {"id": 123},
+                         "name": "rootfs-trixie-amd64-vm-incusd-123-1", "digest": None,
+                         "created_at": "2026-10-28T10:00:00Z", "expires_at": "2099-11-10T10:00:00Z"}
+        self.calls = []
+
+    def query(self, pages, runs=None, attempts=None, **limits):
+        runs = {123: self.run} if runs is None else runs
+        attempts = {(123, 1): dict(self.run, run_attempt=1)} if attempts is None else attempts
+
+        def api(path, *, query=None):
+            self.calls.append((path, query))
+            prefix = f"/repos/{self.repository}/actions/"
+            if path == prefix + "artifacts":
+                return {"artifacts": pages[query['page'] - 1]}
+            if query is not None:
+                self.fail("pagination used outside the artifact listing")
+            suffix = path.removeprefix(prefix).split('/')
+            if len(suffix) == 2 and suffix[0] == 'runs':
+                return runs[int(suffix[1])]
+            if len(suffix) == 4 and suffix[0] == 'runs' and suffix[2] == 'attempts':
+                return attempts[(int(suffix[1]), int(suffix[3]))]
+            self.fail("unexpected API request: " + path)
+
+        with mock.patch.object(TRANSFORM, "api_json", side_effect=api), \
+                (mock.patch.multiple(TRANSFORM, **limits) if limits else nullcontext()):
+            return TRANSFORM.list_inputs(self.repository, self.now)
+
+    def test_artifact_id_alone_resolves_run_without_changing_the_descriptor(self):
+        attempt = dict(self.run, run_attempt=1)
+        with mock.patch.object(TRANSFORM, "api_json", side_effect=[self.artifact, self.run, attempt]) as api:
+            inferred = TRANSFORM.inspect_source(self.repository, None, "456")
+        with mock.patch.object(TRANSFORM, "api_json", side_effect=[self.run, self.artifact, attempt]):
+            explicit = TRANSFORM.inspect_source(self.repository, "123", "456")
+        self.assertEqual(inferred, explicit)
+        self.assertEqual(api.call_args_list[0], mock.call(f"/repos/{self.repository}/actions/artifacts/456"))
+        self.assertEqual(api.call_args_list[1], mock.call(f"/repos/{self.repository}/actions/runs/123"))
+
+    def test_auto_resolution_rejects_artifacts_without_a_producing_run(self):
+        with mock.patch.object(TRANSFORM, "api_json", return_value=dict(self.artifact, workflow_run=None)) as api:
+            with self.assertRaisesRegex(TRANSFORM.SourceRejected, "producing workflow"):
+                TRANSFORM.inspect_source(self.repository, None, "456")
+            self.assertEqual(api.call_count, 1)
+
+    def test_auto_resolution_rejects_expired_timestamps_without_selecting_another_artifact(self):
+        expired = dict(self.artifact, expires_at="2000-01-01T00:00:00Z")
+        with mock.patch.object(TRANSFORM, "api_json", side_effect=[expired, self.run]) as api:
+            with self.assertRaisesRegex(TRANSFORM.SourceRejected, "expired"):
+                TRANSFORM.inspect_source(self.repository, None, "456")
+            self.assertEqual(api.call_count, 2)
+
+    def test_explicit_run_id_still_checks_artifact_ownership(self):
+        wrong = dict(self.artifact, workflow_run={"id": 999})
+        with mock.patch.object(TRANSFORM, "api_json", side_effect=[self.run, wrong]):
+            with self.assertRaisesRegex(TRANSFORM.SourceRejected, "belong"):
+                TRANSFORM.inspect_source(self.repository, "123", "456")
+
+    def test_invalid_artifact_id_is_rejected_before_any_api_call(self):
+        with mock.patch.object(TRANSFORM, "api_json") as api:
+            for value in ("0", "../456", "", "456?x=y"):
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    TRANSFORM.inspect_source(self.repository, None, value)
+            api.assert_not_called()
+
+    def test_catalog_is_sorted_and_reuses_successful_attempt_checks(self):
+        newer = dict(self.artifact, id=457, created_at="2026-10-28T11:00:00Z")
+        catalog = self.query([[self.artifact, newer]])
+        self.assertEqual([item['artifact_id'] for item in catalog['candidates']], [457, 456])
+        self.assertTrue(catalog['scan_complete'])
+        self.assertEqual(catalog['scanned_artifacts'], 2)
+        self.assertEqual(len(self.calls), 3)  # Listing, producing run, selected attempt.
+        rendered = TRANSFORM.render_inputs(catalog)
+        self.assertIn("只填写选中行的 Artifact ID", rendered)
+        self.assertIn("2026-10-28T11:00:00Z", rendered)
+        self.assertIn("/actions/runs/123/artifacts/457", rendered)
+        self.assertLess(rendered.index("`457`"), rendered.index("`456`"))
+
+    def test_current_attempt_does_not_require_an_extra_attempt_lookup(self):
+        artifact = dict(self.artifact, name="rootfs-trixie-amd64-vm-incusd-123-2")
+        catalog = self.query([[artifact]], attempts={})
+        self.assertEqual(catalog['candidates'][0]['run_attempt'], 2)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_both_registered_base_targets_are_listed(self):
+        memini = dict(self.artifact, id=457, name="rootfs-trixie-amd64-memini-123-1")
+        catalog = self.query([[self.artifact, memini]])
+        self.assertEqual({item['target'] for item in catalog['candidates']},
+                         {'amd64-trixie-vm-incusd', 'amd64-trixie-memini'})
+
+    def test_logs_transforms_removed_names_and_expired_inputs_are_filtered_before_run_queries(self):
+        entries = [dict(self.artifact, id=500+i, name=name) for i, name in enumerate((
+            "logs-rootfs-trixie-amd64-vm-incusd-123-1",
+            "rootfs-trixie-amd64-vm-incusd-br-initrd-123-1",
+            "rootfs-trixie-amd64-removed-device-123-1"))]
+        entries += [dict(self.artifact, id=510, expired=True),
+                    dict(self.artifact, id=511, expires_at="2026-10-28T11:59:59Z"),
+                    dict(self.artifact, id=512, workflow_run=None)]
+        catalog = self.query([entries], runs={})
+        self.assertEqual(catalog['candidates'], [])
+        self.assertEqual(len(self.calls), 1)
+        self.assertIn("没有可用基础产物", TRANSFORM.render_inputs(catalog))
+
+    def test_unsuccessful_foreign_and_wrong_workflow_runs_are_not_candidates(self):
+        for changes in ({"conclusion": "failure"}, {"status": "in_progress"},
+                        {"head_repository": {"full_name": "other/fork"}},
+                        {"path": ".github/workflows/rootfs-transform.yml"}):
+            with self.subTest(changes=changes):
+                catalog = self.query([[self.artifact]], runs={123: dict(self.run, **changes)})
+                self.assertEqual(catalog['candidates'], [])
+
+    def test_a_failed_earlier_attempt_is_not_accepted_after_a_successful_rerun(self):
+        catalog = self.query([[self.artifact]], attempts={(123, 1): dict(self.run, run_attempt=1, conclusion="failure")})
+        self.assertEqual(catalog['candidates'], [])
+
+    def test_unsupported_architecture_has_no_catalog_fallback(self):
+        with mock.patch.dict(TRANSFORM.BACKENDS, {}, clear=True):
+            self.assertEqual(self.query([[self.artifact]])['candidates'], [])
+
+    def test_pagination_includes_later_pages_and_deduplicates_overlapping_entries(self):
+        logs = [dict(self.artifact, id=1000+i, name="logs-unrelated") for i in range(99)]
+        newer = dict(self.artifact, id=457, created_at="2026-10-28T11:00:00Z")
+        catalog = self.query([[self.artifact, *logs], [self.artifact, newer]])
+        self.assertEqual([item['artifact_id'] for item in catalog['candidates']], [457, 456])
+        self.assertEqual([query for path, query in self.calls if query is not None],
+                         [{'per_page': 100, 'page': 1}, {'per_page': 100, 'page': 2}])
+
+    def test_scan_limit_is_explicit_in_the_summary(self):
+        logs = [dict(self.artifact, id=1000+i, name="logs-unrelated") for i in range(100)]
+        catalog = self.query([logs, logs], CATALOG_MAX_PAGES=2)
+        self.assertFalse(catalog['scan_complete'])
+        self.assertEqual(catalog['scanned_artifacts'], 200)
+        self.assertIn("扫描上限", TRANSFORM.render_inputs(catalog))
+
+    def test_at_most_twenty_newest_eligible_artifacts_are_displayed(self):
+        artifacts = [dict(self.artifact, id=500+i) for i in range(25)]
+        catalog = self.query([artifacts])
+        self.assertEqual(len(catalog['candidates']), 20)
+        self.assertEqual([item['artifact_id'] for item in catalog['candidates']], list(range(524, 504, -1)))
+
+    def test_api_errors_are_not_reported_as_an_empty_catalog(self):
+        for failures in ([ValueError("GitHub request failed (HTTP 403)")],
+                         [{"artifacts": [self.artifact]}, ValueError("GitHub request failed (HTTP 404)")],
+                         [{"artifacts": [self.artifact]}, self.run, ValueError("GitHub request failed (HTTP 429)")]):
+            with self.subTest(failures=failures), mock.patch.object(TRANSFORM, "api_json", side_effect=failures):
+                with self.assertRaisesRegex(ValueError, "GitHub request failed"):
+                    TRANSFORM.list_inputs(self.repository, self.now)
+
+    def test_malformed_listing_and_timestamps_fail_instead_of_hiding_a_query_error(self):
+        for response in ({"message": "not a listing"}, {"artifacts": [dict(self.artifact, created_at="unknown")]}):
+            with self.subTest(response=response), mock.patch.object(TRANSFORM, "api_json", return_value=response):
+                with self.assertRaises(ValueError):
+                    TRANSFORM.list_inputs(self.repository, self.now)
+
+    def test_api_pagination_uses_a_fixed_host_and_controlled_parameters(self):
+        opener = mock.Mock()
+        opener.open.return_value = io.BytesIO(b'{}')
+        with mock.patch.dict(os.environ, GH_TOKEN="fixture-token"), \
+                mock.patch.object(urllib.request, "build_opener", return_value=opener):
+            with TRANSFORM.github_request(f"/repos/{self.repository}/actions/artifacts",
+                                          query={"per_page": 100, "page": 2}):
+                pass
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.full_url,
+                         f"https://api.github.com/repos/{self.repository}/actions/artifacts?per_page=100&page=2")
+        with mock.patch.dict(os.environ, GH_TOKEN="fixture-token"), \
+                mock.patch.object(urllib.request, "build_opener") as network:
+            for path, query in (("https://other.example/artifacts", None),
+                                (f"/repos/{self.repository}/actions/artifacts?per_page=100", None),
+                                (f"/repos/{self.repository}/actions/artifacts", {'page': 1, 'per_page': 100, 'url': 'evil'}),
+                                (f"/repos/{self.repository}/actions/runs/123", {'page': 1, 'per_page': 100}),
+                                (f"/repos/{self.repository}/actions/artifacts", {'page': 0, 'per_page': 100})):
+                with self.subTest(path=path, query=query), self.assertRaises(ValueError):
+                    TRANSFORM.github_request(path, query=query)
+            network.assert_not_called()
+
+    def test_cli_inspect_without_run_id_and_catalog_output(self):
+        temporary = tempfile.TemporaryDirectory(prefix="rootfs-catalog-cli-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        output, summary = root/'source.json', root/'summary.md'
+        args = ['transform.py', 'inspect', '--repository', self.repository, '--artifact-id', '456', '--output', str(output)]
+        with mock.patch.object(sys, 'argv', args), \
+                mock.patch.object(TRANSFORM, 'api_json', side_effect=[self.artifact, self.run, dict(self.run, run_attempt=1)]):
+            TRANSFORM.main()
+        self.assertEqual(json.loads(output.read_text())['run_id'], 123)
+        args = ['transform.py', 'list-inputs', '--repository', self.repository, '--summary', str(summary)]
+        with mock.patch.object(sys, 'argv', args), redirect_stdout(io.StringIO()), \
+                mock.patch.object(TRANSFORM, 'api_json', side_effect=[{'artifacts': [self.artifact]}, self.run,
+                                                                     dict(self.run, run_attempt=1)]):
+            TRANSFORM.main()
+        self.assertIn('`456`', summary.read_text())
+
+    def test_cli_query_failure_does_not_write_an_empty_success_summary(self):
+        temporary = tempfile.TemporaryDirectory(prefix="rootfs-catalog-error-")
+        self.addCleanup(temporary.cleanup)
+        summary = Path(temporary.name)/'summary.md'
+        args = ['transform.py', 'list-inputs', '--repository', self.repository, '--summary', str(summary)]
+        error_log = io.StringIO()
+        with mock.patch.object(sys, 'argv', args), redirect_stderr(error_log), \
+                mock.patch.object(TRANSFORM, 'api_json', side_effect=ValueError('GitHub request failed (HTTP 403)')):
+            with self.assertRaises(SystemExit) as exit_status:
+                TRANSFORM.main()
+        self.assertEqual(exit_status.exception.code, 1)
+        self.assertIn('HTTP 403', error_log.getvalue())
+        self.assertFalse(summary.exists())
 
 
 if __name__ == "__main__":

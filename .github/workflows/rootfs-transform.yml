@@ -3,12 +3,8 @@ name: Transform rootfs
 on:
   workflow_dispatch:
     inputs:
-      source_run_id:
-        description: Successful base rootfs workflow run ID
-        required: true
-        type: string
       source_artifact_id:
-        description: Rootfs artifact ID belonging to that run (not a logs artifact)
+        description: Base rootfs artifact ID from List rootfs inputs or a successful build summary
         required: true
         type: string
 
@@ -17,7 +13,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: rootfs-transform-${{ inputs.source_run_id }}-${{ inputs.source_artifact_id }}-${{ github.ref }}
+  group: rootfs-transform-${{ inputs.source_artifact_id }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -39,12 +35,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_REPOSITORY: ${{ github.repository }}
-          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
           SOURCE_FILE: ${{ runner.temp }}/rootfs-transform-source.json
         run: |
           python3 scripts/transform.py inspect --repository "$SOURCE_REPOSITORY" \
-            --run-id "$SOURCE_RUN_ID" --artifact-id "$SOURCE_ARTIFACT_ID" \
+            --artifact-id "$SOURCE_ARTIFACT_ID" \
             --output "$SOURCE_FILE" --github-output "$GITHUB_OUTPUT"
 
   transform:

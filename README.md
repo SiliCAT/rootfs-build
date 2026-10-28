@@ -20,6 +20,7 @@ GitHub 上可从 **Actions → Build rootfs → Run workflow** 手动选择 memi
 工作流在 Debian 容器中准备工具，成功后上传压缩包、校验和、包版本及构建信息，
 并单独保存日志。入口需先提交到默认分支；外壳本身不自动安装依赖。
 
-已有基础产物可从 **Actions → Transform rootfs → Run workflow** 指定运行 ID 和产物 ID，
+已有基础产物可先从 **Actions → List rootfs inputs → Run workflow** 查询候选清单，
+再从 **Actions → Transform rootfs → Run workflow** 只填写选中的 artifact ID，
 执行共享的 [br-initrd 配方](transforms/trixie/br-initrd/README.md)。当前开放 amd64 原生加工，
 配方本身按跨架构共用设计。
