@@ -109,3 +109,6 @@ python3 -m unittest discover -s tests -v
 测试包括真实微型归档往返、失败/取消、并发、挂载检测、目标校验、包清单和日志导出。
 完整 memini 构建应在具备所需权限与网络信任的 Debian 容器中验证；实际 GitHub 上的
 检出、运行和 artifact 上传则以对应的 Actions 运行结果为准。
+
+已有构建产物可使用独立的 [Transform rootfs 工作流](rootfs-transform.md) 进行 br-initrd 加工。
+它按指定的 run/artifact ID 下载输入，不重新运行本页的基础构建。

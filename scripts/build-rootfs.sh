@@ -12,10 +12,11 @@ Options:
   --threads N             Zstandard worker threads, 1..64; default: min(nproc, 4).
   --compression-level N   Zstandard level, 1..19; default: 6.
   --keep-work             Retain the rootfs and build.log after success as well.
+  --input-rootfs FILE     Pass an existing rootfs archive as the recipe's second argument.
   -h, --help              Show help without creating resources.
 
 Run as root. Builder dependencies must already be installed.
-The recipe is an executable with a shebang and receives one absolute empty directory.
+The recipe receives one absolute empty directory and, if supplied, an absolute input archive.
 The recipe runs in a private mount namespace; root and mount-namespace privileges are required.
 An optional executable verify.sh beside the recipe receives the same directory.
 Output contains etc/, usr/, var/ directly, without a rootfs/ prefix.
@@ -50,6 +51,7 @@ positive_integer() {
 }
 
 recipe_input=
+rootfs_input=
 output_input=
 work_parent=${TMPDIR:-/tmp}
 threads=
@@ -57,10 +59,11 @@ compression_level=6
 keep_work=0
 while (( $# )); do
     case $1 in
-        --recipe|--output|--work-dir|--threads|--compression-level)
+        --recipe|--output|--work-dir|--threads|--compression-level|--input-rootfs)
             (( $# >= 2 )) && [[ -n $2 ]] || die "$1 requires a nonempty value" 2
             case $1 in
                 --recipe) recipe_input=$2 ;;
+                --input-rootfs) rootfs_input=$2 ;;
                 --output) output_input=$2 ;;
                 --work-dir) work_parent=$2 ;;
                 --threads) threads=$2 ;;
@@ -95,6 +98,13 @@ fi
 canonical -e "$recipe_input" || die 'cannot resolve the recipe' 5
 recipe=$REPLY
 validate_executable "$recipe"
+recipe_arguments=()
+if [[ -n $rootfs_input ]]; then
+    canonical -e "$rootfs_input" || die 'cannot resolve input rootfs archive' 5
+    rootfs_input=$REPLY
+    [[ -f $rootfs_input && -r $rootfs_input ]] || die 'input rootfs must be a readable regular file' 5
+    recipe_arguments+=("$rootfs_input")
+fi
 canonical -e "${BASH_SOURCE[0]}" || die 'cannot resolve the build shell' 5
 script_dir=${REPLY%/*}
 common_verify=$script_dir/verify-rootfs.sh
@@ -251,7 +261,7 @@ run_stage() {
 # builder. Once all recipe processes exit, even nested sysfs/EFI mounts disappear
 # with their namespace; the parent still verifies the actual rootfs before tar.
 run_stage 'recipe (private mount namespace)' \
-    unshare --mount --propagation private -- "$recipe" "$rootfs"
+    unshare --mount --propagation private -- "$recipe" "$rootfs" "${recipe_arguments[@]}"
 run_stage 'common rootfs verification' "$common_verify" "$rootfs"
 if [[ -n $recipe_verify ]]; then
     run_stage 'recipe verification' "$recipe_verify" "$rootfs"

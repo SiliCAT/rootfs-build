@@ -1,0 +1,138 @@
+name: Transform rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful base rootfs workflow run ID
+        required: true
+        type: string
+      source_artifact_id:
+        description: Rootfs artifact ID belonging to that run (not a logs artifact)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rootfs-transform-${{ inputs.source_run_id }}-${{ inputs.source_artifact_id }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      runner: ${{ steps.source.outputs.runner }}
+      platform: ${{ steps.source.outputs.platform }}
+      builder_image: ${{ steps.source.outputs.builder_image }}
+      artifact_name: ${{ steps.source.outputs.artifact_name }}
+      source_json: ${{ steps.source.outputs.source_json }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Resolve source and native backend
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+          SOURCE_FILE: ${{ runner.temp }}/rootfs-transform-source.json
+        run: |
+          python3 scripts/transform.py inspect --repository "$SOURCE_REPOSITORY" \
+            --run-id "$SOURCE_RUN_ID" --artifact-id "$SOURCE_ARTIFACT_ID" \
+            --output "$SOURCE_FILE" --github-output "$GITHUB_OUTPUT"
+
+  transform:
+    needs: resolve
+    runs-on: ${{ needs.resolve.outputs.runner }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILDER_IMAGE: ${{ needs.resolve.outputs.builder_image }}
+      BUILDER_PLATFORM: ${{ needs.resolve.outputs.platform }}
+      CONTAINER_NAME: rootfs-transform-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Download and verify selected input
+        env:
+          STATE_DIRECTORY: ${{ runner.temp }}/rootfs-transform-${{ github.run_id }}-${{ github.run_attempt }}
+          SOURCE_DESCRIPTOR: ${{ needs.resolve.outputs.source_json }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "STATE_DIRECTORY=$STATE_DIRECTORY" >> "$GITHUB_ENV"
+          mkdir -p "$STATE_DIRECTORY/logs" "$STATE_DIRECTORY/output" "$STATE_DIRECTORY/work"
+          printf '%s\n' "$SOURCE_DESCRIPTOR" > "$STATE_DIRECTORY/source.json"
+          python3 scripts/transform.py fetch --source "$STATE_DIRECTORY/source.json" \
+            --directory "$STATE_DIRECTORY/input" 2>&1 | tee "$STATE_DIRECTORY/logs/input.log"
+      - name: Prepare runner and pull native builder
+        run: |
+          docker pull --platform "$BUILDER_PLATFORM" "$BUILDER_IMAGE" 2>&1 | tee "$STATE_DIRECTORY/logs/pull.log"
+          df -h "$STATE_DIRECTORY" | tee "$STATE_DIRECTORY/logs/disk.log"
+          free -h | tee "$STATE_DIRECTORY/logs/memory.log"
+      - name: Prepare builder and transform rootfs
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_REF: ${{ github.ref }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -o pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          docker run --init --privileged --name "$CONTAINER_NAME" \
+            --platform "$BUILDER_PLATFORM" --cpuset-cpus "$cpus" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/work,readonly" \
+            --mount "type=bind,src=$STATE_DIRECTORY,dst=/build" \
+            --mount "type=bind,src=$STATE_DIRECTORY/input,dst=/build/input,readonly" \
+            --workdir /work \
+            --env SOURCE_COMMIT --env SOURCE_REPOSITORY --env SOURCE_REF --env WORKFLOW_RUN_URL \
+            "$BUILDER_IMAGE" bash -c \
+            'scripts/prepare-builder.sh && python3 -m unittest discover -s tests -v && exec scripts/run-transform.sh /build' \
+            2>&1 | tee "$STATE_DIRECTORY/logs/workflow.log"
+      - name: Stop builder and export diagnostics
+        if: always()
+        run: |
+          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            if [ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")" = true ]; then
+              docker stop --time 30 "$CONTAINER_NAME"
+            fi
+            docker rm --force "$CONTAINER_NAME"
+          fi
+          if [ -d "$STATE_DIRECTORY" ]; then
+            sudo -n python3 scripts/target.py diagnostics "$STATE_DIRECTORY"
+            for record in source.json br-initrd.report.json; do
+              if [ -f "$STATE_DIRECTORY/$record" ]; then
+                sudo -n install -m 0644 "$STATE_DIRECTORY/$record" "$STATE_DIRECTORY/logs/$record"
+              fi
+            done
+          fi
+      - name: Upload transformed rootfs and build records
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ needs.resolve.outputs.artifact_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.STATE_DIRECTORY }}/output/*.tar.zst
+            ${{ env.STATE_DIRECTORY }}/output/*.sha256
+            ${{ env.STATE_DIRECTORY }}/output/*.packages.tsv
+            ${{ env.STATE_DIRECTORY }}/output/*.build.json
+            ${{ env.STATE_DIRECTORY }}/output/*.SHA256SUMS
+      - name: Upload transform diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: logs-${{ needs.resolve.outputs.artifact_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: ${{ env.STATE_DIRECTORY }}/logs/

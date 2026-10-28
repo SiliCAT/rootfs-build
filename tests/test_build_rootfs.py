@@ -176,6 +176,30 @@ class ArchiveShellTests(unittest.TestCase):
         self.write_recipe("raise SystemExit(37)\n")
         self.assert_failed_without_archive(self.run_build(), 37)
 
+    def test_input_archive_is_passed_as_an_absolute_second_argument(self):
+        source = self.base / "input archive\nwith spaces.tar.zst"
+        source.write_bytes(b"input must remain unchanged")
+        self.executable(self.recipe, "#!/usr/bin/env python3\n" + textwrap.dedent('''
+            from pathlib import Path
+            import sys
+            assert len(sys.argv) == 3
+            root, archive = map(Path, sys.argv[1:])
+            assert archive.is_absolute()
+            for name in ('etc', 'usr', 'var'):
+                (root / name).mkdir()
+            (root / 'etc/input').write_bytes(archive.read_bytes())
+        '''))
+        result = self.run_build("--input-rootfs", str(source))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.restore() / "etc/input").read_bytes(), source.read_bytes())
+        self.assertEqual(source.read_bytes(), b"input must remain unchanged")
+
+    def test_missing_input_is_rejected_before_creating_work(self):
+        result = self.run_build("--input-rootfs", str(self.base / "missing.tar.zst"))
+        self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
+        self.assertEqual(list(self.work.iterdir()), [])
+        self.assertFalse(self.output.exists())
+
     def test_recipe_isolates_mounts_without_changing_user_namespace(self):
         self.write_recipe('''
             (root / 'etc/namespaces.json').write_text(json.dumps({

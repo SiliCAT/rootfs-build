@@ -55,7 +55,11 @@ def sha256(path):
 
 
 def export_metadata(target_id, root, output):
-    target = resolve(target_id)
+    return export_rootfs_metadata(resolve(target_id), root, output)
+
+
+def export_rootfs_metadata(target, root, output, extra=None):
+    """Export a checked rootfs; callers supply its identity and optional provenance."""
     root = root.resolve(strict=True)
     output = output.resolve(strict=True)
     stem = target["artifact_name"]
@@ -102,6 +106,10 @@ def export_metadata(target_id, root, output):
         "archive_sha256": sha256(archive),
         "boot_tested": False,
     }
+    if extra:
+        if set(extra) & set(metadata):
+            raise ValueError("extra metadata cannot replace standard build fields")
+        metadata.update(extra)
     metadata_path = output / f"{stem}.build.json"
     metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
     files = [archive, output / f"{archive.name}.sha256", package_path, metadata_path]
