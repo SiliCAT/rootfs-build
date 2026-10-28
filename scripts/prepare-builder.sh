@@ -18,7 +18,7 @@ apt-get install -y --no-install-recommends \
     python3 acl attr libcap2-bin
 update-ca-certificates
 
-unshare --mount -- true
+unshare --mount --propagation private -- true
 chroot / /bin/true
 printf '[BUILDER] architecture=%s available_cpus=%s\n' "$(dpkg --print-architecture)" "$(nproc)"
 mmdebstrap --version

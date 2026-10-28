@@ -9,7 +9,7 @@ sudo -n scripts/build-rootfs.sh \
 ```
 
 外壳不安装依赖。构建环境需要 Bash、GNU coreutils/findutils、GNU tar（含 ACL、
-xattr 和 SELinux 支持）、Zstandard、awk，以及 util-linux/procps 提供的 flock、setsid
+xattr 和 SELinux 支持）、Zstandard、awk，以及 util-linux/procps 提供的 flock、setsid、unshare
 和 ps/pkill；mmdebstrap、APT、Debian keyring、CA 和模拟器等配方前提由工作流准备阶段提供。
 工作流或容器还须允许配方所需的 chroot、挂载和命名空间操作。
 
@@ -24,7 +24,13 @@ xattr 和 SELinux 支持）、Zstandard、awk，以及 util-linux/procps 提供�
 的工作目录；配方不能依赖特定 cwd。
 
 配方负责包集、系统配置、内核与设备检查，以及 mmdebstrap 返回后的严格收尾。
-配方必须等待所有工作结束，不得留下后台进程、脱离会话的写入者或残留挂载。
+外壳通过 `unshare --mount --propagation private` 为配方创建独立、私有的挂载命名空间。
+它不创建用户命名空间，不改变 mmdebstrap 模式或 UID/GID。写入目标目录的文件保留，
+构建期 `/proc`、`/sys` 及嵌套 EFI 等临时挂载则随命名空间结束释放，不传播到父构建环境。
+无法创建命名空间时直接失败，不回退到共享挂载环境。
+
+配方必须等待所有工作结束，不得留下后台进程或脱离会话的写入者。
+配方仍应主动清理挂载；命名空间结束提供最终隔离，外壳继续从父空间严格检查残留挂载。
 不能绑定 runner 的 `/lib/modules`、`/usr/src` 到目标 rootfs。
 
 外壳随后执行 `scripts/verify-rootfs.sh`，检查实际的挂载表以及 `etc/`、`usr/`、
@@ -82,7 +88,8 @@ HUP、INT、TERM 对应 `129`、`130`、`143`。外壳会向当前阶段的进�
 最多等待十秒，必要时使用 KILL；如果仍无法确认停止，会报告并保留所有工作。
 配方不应创建脱离构建会话的进程；工作流平台强制终止整个虚拟机不受脚本控制。
 
-失败时保留构建目录、日志和隐藏的归档暂存目录，终端会报告位置。不会自动递归卸载，
+失败时保留构建目录、日志和隐藏的归档暂存目录，终端会报告位置。配方进程全部结束后，
+其私有挂载命名空间中的临时挂载由内核释放；外壳不会在父环境自动递归卸载，
 也不会递归删除失败现场。检查进程和残留挂载、确认不再写入并完成必要卸载后，
 才可人工删除这些目录。重试总是使用新的空构建目录。
 
@@ -111,7 +118,9 @@ sudo -n tar --zstd --extract \
 python3 -m unittest discover -s tests -v
 ```
 
-测试用微型配方实际压缩、验证和解包，不构建完整 Debian。普通用户运行时只模拟
-外壳的 UID 预检；真实 root 所有权测试和文件系统不支持的 ACL 测试会明确跳过。
+测试用微型配方实际压缩、验证和解包，不构建完整 Debian。归档外壳测试要求真实 root
+和私有挂载命名空间权限；缺少权限时会明确跳过该测试类，目标登记等测试仍可执行。
+推荐在工作流使用的特权 Debian 构建容器中运行完整套件。
 取消、失败、并发锁、压缩、归档比较、残留挂载检测和元数据恢复均有相应检查。
-残留挂载测试替换挂载表输入，不需要执行特权 mount。
+挂载表解析测试使用模拟输入；EFI 回归测试使用真实嵌套 tmpfs 挂载，检查成功、失败和
+取消后的挂载释放、归档排除运行时内容，以及用户命名空间和高 UID 的保留。

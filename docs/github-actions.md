@@ -38,6 +38,10 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 进程回收需求。仓库只读挂载到 `/work`，本次运行的临时状态目录挂载到 `/build`。
 没有挂载 runner 的 `/lib/modules`、`/usr/src` 或 Docker socket。
 
+归档外壳进一步在私有挂载命名空间中执行配方，避免 mmdebstrap 的 `/sys` 或 EFI
+子挂载残留到归档环境。配方退出后仍执行父空间的残留挂载检查。这里没有用户命名空间
+或 UID 映射变更，root 模式和高 UID 文件所有权保持原有语义。
+
 CPU affinity 限定为 runner 可用 CPU 中的前两个，使依赖 nproc 的 DKMS 构建并行度
 受到限制。压缩也使用两个线程。单次构建超时为 120 分钟。
 

@@ -1,12 +1,13 @@
 """Exercise the real archive shell with a tiny recipe, without building Debian.
 
-Non-root runs mock only the shell's UID preflight. Archive creation, verification,
-restoration, process cancellation and output locking use the actual system tools.
+These tests require real root and mount-namespace privileges. Archive creation,
+verification, restoration, cancellation, mounts and locking use the actual tools.
 """
 
 import ctypes.util
 import fcntl
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -25,6 +26,15 @@ VERIFY = REPOSITORY / "scripts/verify-rootfs.sh"
 
 
 class ArchiveShellTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.geteuid() != 0:
+            raise unittest.SkipTest("requires root and private mount-namespace privileges")
+        result = subprocess.run(["unshare", "--mount", "--propagation", "private", "--", "true"],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode:
+            raise unittest.SkipTest("cannot create private mount namespaces: " + result.stderr.strip())
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="archive-shell-")
         self.addCleanup(self.temporary.cleanup)
@@ -36,8 +46,6 @@ class ArchiveShellTests(unittest.TestCase):
         self.recipe = self.base / "recipe with space.sh"
         self.output = self.base / "output" / "rootfs.tar.zst"
         self.environment = dict(os.environ, PATH=str(self.tools) + os.pathsep + os.environ["PATH"])
-        if os.geteuid() != 0:
-            self.executable(self.tools / "id", "#!/bin/sh\nprintf '0\\n'\n")
         self.write_recipe()
 
     @staticmethod
@@ -49,6 +57,7 @@ class ArchiveShellTests(unittest.TestCase):
         self.executable(self.recipe, "#!/usr/bin/env python3\n" + textwrap.dedent('''
             import ctypes
             import ctypes.util
+            import json
             import os
             from pathlib import Path
             import subprocess
@@ -167,6 +176,68 @@ class ArchiveShellTests(unittest.TestCase):
         self.write_recipe("raise SystemExit(37)\n")
         self.assert_failed_without_archive(self.run_build(), 37)
 
+    def test_recipe_isolates_mounts_without_changing_user_namespace(self):
+        self.write_recipe('''
+            (root / 'etc/namespaces.json').write_text(json.dumps({
+                'mount': os.readlink('/proc/self/ns/mnt'),
+                'user': os.readlink('/proc/self/ns/user'),
+                'uid': os.getuid(),
+            }))
+        ''')
+        result = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        metadata = json.loads((self.restore() / "etc/namespaces.json").read_text())
+        self.assertNotEqual(metadata["mount"], os.readlink("/proc/self/ns/mnt"))
+        self.assertEqual(metadata["user"], os.readlink("/proc/self/ns/user"))
+        self.assertEqual(metadata["uid"], 0)
+
+    def efi_mount_fixture(self):
+        # Cleanup is a safeguard for running this regression against old code.
+        # Only these known synthetic mounts, below this test's private tree, are touched.
+        self.addCleanup(self.cleanup_fixture_mounts)
+        return textwrap.dedent('''
+            (root / 'sys').mkdir()
+            subprocess.run(['mount', '-t', 'tmpfs', 'rootfs-test-sys', str(root / 'sys')], check=True)
+            efivars = root / 'sys/firmware/efi/efivars'
+            efivars.mkdir(parents=True)
+            subprocess.run(['mount', '-t', 'tmpfs', 'rootfs-test-efivars', str(efivars)], check=True)
+            (efivars / 'runtime-only').write_text('must not enter the archive')
+            busy = subprocess.run(['umount', str(root / 'sys')], text=True, capture_output=True)
+            assert busy.returncode != 0
+            print('simulated mmdebstrap cleanup warning: ' + busy.stderr, flush=True)
+        ''')
+
+    def cleanup_fixture_mounts(self):
+        for root in self.work.glob("rootfs-build.*/rootfs"):
+            for relative in ("sys/firmware/efi/efivars", "sys"):
+                subprocess.run(["umount", str(root / relative)], capture_output=True, timeout=5)
+
+    def assert_no_fixture_mounts(self):
+        source = next(self.work.glob("rootfs-build.*")) / "rootfs"
+        result = subprocess.run([str(VERIFY), str(source)], env=self.environment,
+                                text=True, capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(list((source / "sys").iterdir()), [])
+
+    def test_nested_efi_mounts_disappear_before_archive(self):
+        self.write_recipe(self.efi_mount_fixture())
+        result = self.run_build("--keep-work")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("simulated mmdebstrap cleanup warning", result.stdout)
+        self.assert_no_fixture_mounts()
+        self.assertEqual(list((self.restore() / "sys").iterdir()), [])
+
+    def test_failed_recipe_releases_nested_mounts_and_preserves_status(self):
+        self.write_recipe(self.efi_mount_fixture() + "\nraise SystemExit(37)\n")
+        self.assert_failed_without_archive(self.run_build(), 37)
+        self.assert_no_fixture_mounts()
+
+    def test_namespace_creation_failure_never_runs_recipe(self):
+        self.executable(self.tools / "unshare", "#!/bin/sh\nexit 42\n")
+        self.assert_failed_without_archive(self.run_build(), 42)
+        source = next(self.work.glob("rootfs-build.*")) / "rootfs"
+        self.assertEqual(list(source.iterdir()), [])
+
     def test_optional_recipe_verifier_failure(self):
         self.executable(self.recipe.parent / "verify.sh", "#!/bin/sh\nexit 47\n")
         self.assert_failed_without_archive(self.run_build(), 47)
@@ -260,12 +331,12 @@ class ArchiveShellTests(unittest.TestCase):
         self.assertEqual(list(self.work.iterdir()), [])
 
     def test_term_stops_recipe_and_child_and_retains_work(self):
-        self.write_recipe('''
+        self.write_recipe(self.efi_mount_fixture() + textwrap.dedent('''
             child = subprocess.Popen(['sleep', '30'])
             (root / 'child.pid').write_text(str(child.pid))
             print('waiting for cancellation', flush=True)
             time.sleep(30)
-        ''')
+        '''))
         process = subprocess.Popen(self.arguments(), env=self.environment, text=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(lambda: process.poll() is None and process.kill())
@@ -286,6 +357,7 @@ class ArchiveShellTests(unittest.TestCase):
         if proc_stat.exists():
             self.assertEqual(proc_stat.read_text().split(") ", 1)[1].split()[0], "Z")
         self.assertTrue(markers[0].exists())
+        self.assert_no_fixture_mounts()
 
     def test_live_background_writer_prevents_publication(self):
         self.write_recipe("subprocess.Popen(['sleep', '30'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n")

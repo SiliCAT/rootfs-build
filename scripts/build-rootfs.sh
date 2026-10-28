@@ -16,6 +16,7 @@ Options:
 
 Run as root. Builder dependencies must already be installed.
 The recipe is an executable with a shebang and receives one absolute empty directory.
+The recipe runs in a private mount namespace; root and mount-namespace privileges are required.
 An optional executable verify.sh beside the recipe receives the same directory.
 Output contains etc/, usr/, var/ directly, without a rootfs/ prefix.
 Existing archives or checksums are never overwritten. Failure retains diagnostics.
@@ -81,7 +82,7 @@ if [[ -n $threads ]]; then
 fi
 
 for command in bash id realpath dirname basename mkdir mktemp chmod rm rmdir ln \
-    flock setsid env ps pkill awk sleep tee tar zstd sha256sum nproc; do
+    flock setsid unshare env ps pkill awk sleep tee tar zstd sha256sum nproc; do
     need_cmd "$command"
 done
 [[ $(id -u) == 0 ]] || die 'run this shell as root' 1
@@ -245,7 +246,12 @@ run_stage() {
     (( rc == 0 )) || exit "$rc"
 }
 
-run_stage recipe "$recipe" "$rootfs"
+# Isolate only mounts, not users: real UID/GID ownership (including large IDs)
+# stays intact. Private propagation prevents recipe mounts from reaching the
+# builder. Once all recipe processes exit, even nested sysfs/EFI mounts disappear
+# with their namespace; the parent still verifies the actual rootfs before tar.
+run_stage 'recipe (private mount namespace)' \
+    unshare --mount --propagation private -- "$recipe" "$rootfs"
 run_stage 'common rootfs verification' "$common_verify" "$rootfs"
 if [[ -n $recipe_verify ]]; then
     run_stage 'recipe verification' "$recipe_verify" "$rootfs"
