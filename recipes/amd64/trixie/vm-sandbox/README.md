@@ -6,10 +6,10 @@
 
 ## 构建和加工
 
-GitHub 入口为 **Actions → Build vm-sandbox rootfs → Run workflow**，对应
-`.github/workflows/rootfs-vm-sandbox.yml`。入口固定选择本目标，复用现有的
-`rootfs-build.yml` 完成依赖准备、测试、归档、元数据、Summary 和 JSON 回执。
-现有 **Build rootfs** 入口仍提供 memini 和 vm-incusd。
+GitHub 统一入口为 **Actions → Build rootfs → Run workflow**，对应
+`.github/workflows/rootfs.yml`。在 `target` 下拉列表选择 `amd64-trixie-vm-sandbox`，
+复用 `rootfs-build.yml` 完成依赖准备、测试、归档、元数据、Summary 和 JSON 回执。
+memini、vm-incusd 和 vm-sandbox 共用这个手动入口。
 
 本地可在已准备好工具及挂载权限的原生 amd64 Debian builder 中运行：
 
@@ -22,11 +22,10 @@ sudo -n scripts/build-rootfs.sh \
 配方只接收空的、真实且可写的绝对路径 `TARGET_ROOT`；外壳负责私有挂载命名空间、
 通用验收和压缩包发布。配方不安装 builder 工具，不依赖特定 cwd。
 
-成功的专用工作流产物会出现在 **List rootfs inputs** 中。将其 artifact ID 填入
+成功的构建产物会出现在 **List rootfs inputs** 中。将其 artifact ID 填入
 **Transform rootfs** 即可使用共享的 br-initrd 加工，输出名称为
-`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.zst`。来源校验将专用工作流与本目标绑定，
-不接受从其他入口冒用本目标名称，也不接受加工结果作为基础输入。
-新手动入口须先合入默认分支，才能出现在 GitHub Actions 的入口列表中。
+`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.zst`。来源校验接受统一基础入口的登记目标，并兼容旧专用入口已有的成功产物；不接受加工结果作为基础输入。
+更新默认分支后，GitHub Actions 的目标列表即可显示 vm-sandbox。
 
 ## 包集和系统策略
 
