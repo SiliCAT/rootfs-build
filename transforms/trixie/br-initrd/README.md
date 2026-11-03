@@ -16,12 +16,14 @@
 ```sh
 sudo -n scripts/build-rootfs.sh \
   --recipe transforms/trixie/br-initrd/recipe.sh \
-  --input-rootfs /absolute/input/rootfs-trixie-amd64-vm-incusd.tar.zst \
-  --output /absolute/output/rootfs-trixie-amd64-vm-incusd-br-initrd.tar.zst
+  --input-rootfs /absolute/input/rootfs-trixie-amd64-vm-incusd.tar.xz \
+  --output /absolute/output/rootfs-trixie-amd64-vm-incusd-br-initrd.tar.xz
 ```
 
 配方的位置参数是 `TARGET_ROOT INPUT_ARCHIVE`。目标是外壳提供的空绝对路径，
 输入在目标目录之外，包含 `etc/`、`usr/`、`var/` 等系统目录，不含额外的 `rootfs/` 层。
+最终输出统一为 `.tar.xz`；输入可使用新的 `.tar.xz` 或已有的 `.tar.zst`，由 tar
+识别压缩类型。历史输入不会被重命名或改写。
 本地直接调用者负责输入的来源和校验；工作流会在进入特权 builder 前验证 Actions
 来源及完整的校验清单，并将输入目录挂为只读。工作目录所在文件系统须支持 Linux
 权限、所有权、设备节点、ACL 和 xattrs。

@@ -63,7 +63,7 @@ def export_rootfs_metadata(target, root, output, extra=None):
     root = root.resolve(strict=True)
     output = output.resolve(strict=True)
     stem = target["artifact_name"]
-    archive = output / f"{stem}.tar.zst"
+    archive = output / f"{stem}.tar.xz"
     if not archive.is_file():
         raise ValueError("verified archive is missing")
     result = subprocess.run(
@@ -87,7 +87,7 @@ def export_rootfs_metadata(target, root, output, extra=None):
         raise ValueError("no target kernels available for metadata")
     versions = {}
     for tool, arguments in {"mmdebstrap": ["--version"], "tar": ["--version"],
-                            "zstd": ["--version"]}.items():
+                            "xz": ["--version"]}.items():
         version = subprocess.run([tool, *arguments], check=True, text=True, capture_output=True)
         versions[tool] = (version.stdout or version.stderr).splitlines()[0]
     metadata = {

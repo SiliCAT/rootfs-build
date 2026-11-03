@@ -12,6 +12,7 @@ source /etc/os-release
 }
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
+# XZ creates every new rootfs archive; zstd still reads older base inputs.
 apt-get install -y --no-install-recommends \
     bash coreutils findutils grep sed mawk diffutils tar zstd xz-utils gzip bzip2 \
     util-linux procps mmdebstrap debian-archive-keyring ca-certificates \
@@ -23,5 +24,5 @@ chroot / /bin/true
 printf '[BUILDER] architecture=%s available_cpus=%s\n' "$(dpkg --print-architecture)" "$(nproc)"
 mmdebstrap --version
 tar --version | head -n 1
-zstd --version
+xz --version
 df -h -- . /tmp

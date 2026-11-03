@@ -276,17 +276,23 @@ def render_inputs(catalog):
     return "\n".join(lines)
 
 
-def expected_files(source):
+def expected_files(source, archive_name=None):
     stem = source["base_target"]["artifact_name"]
-    return {f"{stem}{suffix}" for suffix in (
-        ".tar.zst", ".tar.zst.sha256", ".packages.tsv", ".build.json", ".SHA256SUMS")}
+    if archive_name is None:
+        archive_name = f"{stem}.tar.xz"
+    # New outputs are XZ. Existing Zstandard base builds remain valid inputs.
+    if archive_name not in (f"{stem}.tar.xz", f"{stem}.tar.zst"):
+        raise ValueError("unsupported base rootfs archive name")
+    return {archive_name, archive_name + ".sha256", f"{stem}.packages.tsv",
+            f"{stem}.build.json", f"{stem}.SHA256SUMS"}
 
 
 def unpack_artifact(archive, directory, source):
-    expected = expected_files(source)
+    stem = source["base_target"]["artifact_name"]
+    formats = [expected_files(source, stem + suffix) for suffix in (".tar.xz", ".tar.zst")]
     with zipfile.ZipFile(archive) as bundle:
         entries = bundle.infolist()
-        if (len(entries) != len(expected) or {entry.filename for entry in entries} != expected
+        if (len(entries) != 5 or {entry.filename for entry in entries} not in formats
                 or sum(entry.file_size for entry in entries) > MAX_ARTIFACT_BYTES):
             raise ValueError("artifact must contain exactly the five expected base build files")
         for entry in entries:
@@ -314,7 +320,12 @@ def verify_input(directory, source):
     if base["suite"] != "trixie":
         raise ValueError("input must be Debian Trixie")
     stem = base["artifact_name"]
-    expected = expected_files(source)
+    archives = [stem + suffix for suffix in (".tar.xz", ".tar.zst")]
+    present = [name for name in archives if (directory / name).exists() or (directory / name).is_symlink()]
+    if len(present) != 1:
+        raise ValueError("input must contain exactly one supported rootfs archive")
+    archive_name = present[0]
+    expected = expected_files(source, archive_name)
     for name in expected:
         path = directory / name
         if path.is_symlink() or not path.is_file():
@@ -325,7 +336,6 @@ def verify_input(directory, source):
     for name, digest in sums.items():
         if target.sha256(directory / name) != digest:
             raise ValueError(f"input checksum mismatch: {name}")
-    archive_name = f"{stem}.tar.zst"
     if read_sums(directory / f"{archive_name}.sha256") != {archive_name: sums[archive_name]}:
         raise ValueError("archive checksum files disagree")
     build = json.loads((directory / f"{stem}.build.json").read_text())

@@ -5,11 +5,11 @@
 ```sh
 sudo -n scripts/build-rootfs.sh \
   --recipe recipes/amd64/trixie/memini/recipe.sh \
-  --output outputs/rootfs-trixie-amd64-memini.tar.zst
+  --output outputs/rootfs-trixie-amd64-memini.tar.xz
 ```
 
 外壳不安装依赖。构建环境需要 Bash、GNU coreutils/findutils、GNU tar（含 ACL、
-xattr 和 SELinux 支持）、Zstandard、awk，以及 util-linux/procps 提供的 flock、setsid、unshare
+xattr 和 SELinux 支持）、XZ、awk，以及 util-linux/procps 提供的 flock、setsid、unshare
 和 ps/pkill；mmdebstrap、APT、Debian keyring、CA 和模拟器等配方前提由工作流准备阶段提供。
 工作流或容器还须允许配方所需的 chroot、挂载和命名空间操作。
 
@@ -53,28 +53,28 @@ GNU tar 使用 pax 格式，保存数值 UID/GID、权限、时间、硬链接�
 ACL、全部 xattrs 和 SELinux 标签。不会统一改写 owner，也不会解引用符号链接。
 归档过滤 atime/ctime 字段，不承诺恢复访问时间、ctime 或逐字节可重复构建。
 
-默认使用 Zstandard level 6，线程数为 `min(nproc, 4)`；可用 `--compression-level`
-选择 1 到 19，或用 `--threads` 选择 1 到 64。这些参数只影响压缩，不改变配方。
+默认使用 XZ level 6 和 CRC64 完整性检查，线程数为 `min(nproc, 4)`；可用 `--compression-level`
+选择 0 到 9，或用 `--threads` 选择 1 到 64。这些参数只影响压缩，不改变配方。
 
 完整流程为：
 
 1. 执行配方、通用检查和可选的配方验收。
 2. 在输出目录所在文件系统的私有暂存目录中生成归档。
-3. 测试 Zstandard 完整性，用 tar 将归档与原目录比较，再检查目录和挂载状态。
+3. 测试 XZ 完整性，用 tar 将归档与原目录比较，再检查目录和挂载状态。
 4. 生成并验证 SHA-256 校验文件。
 5. 发布完整的校验文件和归档，然后清理成功的工作目录。
 
-结果文件是指定的 `FILE.tar.zst` 和 `FILE.tar.zst.sha256`，权限均为 `0644`。
+结果文件是指定的 `FILE.tar.xz` 和 `FILE.tar.xz.sha256`，权限均为 `0644`。
 归档通过不覆盖目标的硬链接操作发布，是最后的完成标记。输出文件系统需要支持
 硬链接；已有归档、校验文件和符号链接都不会被覆盖。
 
-输出旁的 `FILE.tar.zst.lock` 是保留的并发锁文件，不是待上传产物，不应在构建运行中删除。
+输出旁的 `FILE.tar.xz.lock` 是保留的并发锁文件，不是待上传产物，不应在构建运行中删除。
 同一输出的并发调用会失败；不同输出各自使用独立目录，可以并行运行。
 
 SHA-256 文件记录归档的文件名。验证时进入产物目录：
 
 ```sh
-sha256sum --check rootfs-trixie-amd64-memini.tar.zst.sha256
+sha256sum --check rootfs-trixie-amd64-memini.tar.xz.sha256
 ```
 
 Actions 上传归档和校验文件，不直接上传展开的 rootfs 目录。[memini 工作流](github-actions.md)
@@ -108,8 +108,8 @@ HUP、INT、TERM 对应 `129`、`130`、`143`。外壳会向当前阶段的进�
 在空目录中以具备所需权限的 root 身份解包，目标文件系统也需要支持相应元数据：
 
 ```sh
-sudo -n tar --zstd --extract \
-  --file=rootfs-trixie-amd64-memini.tar.zst \
+sudo -n tar --xz --extract \
+  --file=rootfs-trixie-amd64-memini.tar.xz \
   --directory=/absolute/empty/target \
   --numeric-owner --same-owner --same-permissions \
   --acls --xattrs --xattrs-include='*' --selinux

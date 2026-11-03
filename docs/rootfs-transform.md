@@ -37,6 +37,10 @@
 候选是查询时的快照。加工启动及下载前会重新核对来源和有效期；下载后继续检查
 ZIP digest、五个基础文件、校验清单和构建记录，候选列表不替代这些验收。
 
+新的基础构建和 br-initrd 输出统一为 `.tar.xz`。尚在有效期内的旧 `.tar.zst` 基础
+产物仍可作为输入，加工后同样输出 `.tar.xz`；输入必须只包含一种归档格式及其对应
+校验文件，禁止混入两种归档。旧文件名与摘要保留在来源记录中，不改写历史产物。
+
 ## 已知产物的直接输入
 
 也可从成功的 **Build rootfs** 运行详情 **Summary** 顶部的
@@ -87,15 +91,15 @@ artifact ID 精确锁定一次上传，不隐式寻找“最新”。过期后�
 对于 vm-incusd 输入，结果为：
 
 ```text
-rootfs-trixie-amd64-vm-incusd-br-initrd.tar.zst
-rootfs-trixie-amd64-vm-incusd-br-initrd.tar.zst.sha256
+rootfs-trixie-amd64-vm-incusd-br-initrd.tar.xz
+rootfs-trixie-amd64-vm-incusd-br-initrd.tar.xz.sha256
 rootfs-trixie-amd64-vm-incusd-br-initrd.packages.tsv
 rootfs-trixie-amd64-vm-incusd-br-initrd.build.json
 rootfs-trixie-amd64-vm-incusd-br-initrd.SHA256SUMS
 ```
 
 memini、vm-sandbox 使用各自的基础名称；后者输出
-`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.zst` 及同名前缀的构建记录。
+`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.xz` 及同名前缀的构建记录。
 主产物保留 14 天，诊断日志保留 7 天。
 
 `.build.json` 的顶层代码提交和运行 URL 指本次加工；`base_build` 保留完整的基础构建

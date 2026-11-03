@@ -8,6 +8,7 @@ import ctypes.util
 import fcntl
 import hashlib
 import json
+import lzma
 import os
 from pathlib import Path
 import shutil
@@ -44,7 +45,7 @@ class ArchiveShellTests(unittest.TestCase):
         self.work = self.base / "work with space\nand newline"
         self.work.mkdir()
         self.recipe = self.base / "recipe with space.sh"
-        self.output = self.base / "output" / "rootfs.tar.zst"
+        self.output = self.base / "output" / "rootfs.tar.xz"
         self.environment = dict(os.environ, PATH=str(self.tools) + os.pathsep + os.environ["PATH"])
         self.write_recipe()
 
@@ -124,7 +125,7 @@ class ArchiveShellTests(unittest.TestCase):
     def restore(self):
         restored = self.base / "restored"
         restored.mkdir()
-        subprocess.run(["tar", "--zstd", "--extract", "--file=" + str(self.output),
+        subprocess.run(["tar", "--xz", "--extract", "--file=" + str(self.output),
                         "--directory=" + str(restored), "--same-permissions", "--numeric-owner",
                         "--acls", "--xattrs", "--xattrs-include=*", "--selinux"], check=True,
                        capture_output=True)
@@ -177,7 +178,7 @@ class ArchiveShellTests(unittest.TestCase):
         self.assert_failed_without_archive(self.run_build(), 37)
 
     def test_input_archive_is_passed_as_an_absolute_second_argument(self):
-        source = self.base / "input archive\nwith spaces.tar.zst"
+        source = self.base / "input archive\nwith spaces.tar.xz"
         source.write_bytes(b"input must remain unchanged")
         self.executable(self.recipe, "#!/usr/bin/env python3\n" + textwrap.dedent('''
             from pathlib import Path
@@ -195,7 +196,7 @@ class ArchiveShellTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), b"input must remain unchanged")
 
     def test_missing_input_is_rejected_before_creating_work(self):
-        result = self.run_build("--input-rootfs", str(self.base / "missing.tar.zst"))
+        result = self.run_build("--input-rootfs", str(self.base / "missing.tar.xz"))
         self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
         self.assertEqual(list(self.work.iterdir()), [])
         self.assertFalse(self.output.exists())
@@ -267,8 +268,27 @@ class ArchiveShellTests(unittest.TestCase):
         self.assert_failed_without_archive(self.run_build(), 47)
 
     def test_compression_failure_preserves_status(self):
-        self.executable(self.tools / "zstd", "#!/bin/sh\nexit 23\n")
+        self.executable(self.tools / "xz", "#!/bin/sh\nexit 23\n")
         self.assert_failed_without_archive(self.run_build(), 23)
+
+    def test_xz_crc64_and_level_zero_ignore_external_compressor_options(self):
+        self.environment.update(XZ_DEFAULTS="--format=lzma", XZ_OPT="--check=none")
+        result = self.run_build("--compression-level", "0")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        data = self.output.read_bytes()
+        self.assertTrue(data.startswith(b"\xfd7zXZ\x00"))
+        decompressor = lzma.LZMADecompressor()
+        decompressor.decompress(data)
+        self.assertTrue(decompressor.eof)
+        self.assertEqual(decompressor.check, lzma.CHECK_CRC64)
+
+    def test_invalid_xz_levels_and_old_output_suffix_fail_before_creating_work(self):
+        for value in ("10", "-1", "fast"):
+            with self.subTest(value=value):
+                self.assertEqual(self.run_build("--compression-level", value).returncode, 2)
+        self.output = self.output.with_suffix(".zst")
+        self.assertEqual(self.run_build().returncode, 2)
+        self.assertEqual(list(self.work.iterdir()), [])
 
     def test_archive_compare_detects_source_change(self):
         real_tar = shutil.which("tar")
@@ -283,16 +303,14 @@ class ArchiveShellTests(unittest.TestCase):
         self.assert_failed_without_archive(self.run_build(), 1)
 
     def test_corrupt_compressed_archive_cannot_be_published(self):
-        real_zstd = shutil.which("zstd")
-        self.executable(self.tools / "zstd", "#!/usr/bin/env python3\n" + textwrap.dedent(f'''
+        real_xz = shutil.which("xz")
+        self.executable(self.tools / "xz", "#!/usr/bin/env python3\n" + textwrap.dedent(f'''
             import subprocess, sys
-            from pathlib import Path
-            result = subprocess.run([{real_zstd!r}, *sys.argv[1:]])
-            if result.returncode == 0 and '-o' in sys.argv:
-                path = Path(sys.argv[sys.argv.index('-o') + 1])
-                data = bytearray(path.read_bytes())
-                data[-1] ^= 0xFF
-                path.write_bytes(data)
+            result = subprocess.run([{real_xz!r}, *sys.argv[1:]], stdout=subprocess.PIPE)
+            data = bytearray(result.stdout)
+            if result.returncode == 0 and '--compress' in sys.argv:
+                data[0] ^= 0xFF
+            sys.stdout.buffer.write(data)
             raise SystemExit(result.returncode)
         '''))
         self.assert_failed_without_archive(self.run_build(), 1)
@@ -301,7 +319,7 @@ class ArchiveShellTests(unittest.TestCase):
         real_ln = shutil.which("ln")
         self.executable(self.tools / "ln", "#!/usr/bin/env python3\n" + textwrap.dedent(f'''
             import os, sys
-            if sys.argv[-1].endswith('.tar.zst'):
+            if sys.argv[-1].endswith('.tar.xz'):
                 raise SystemExit(38)
             os.execv({real_ln!r}, [{real_ln!r}, *sys.argv[1:]])
         '''))
@@ -392,7 +410,7 @@ class ArchiveShellTests(unittest.TestCase):
         self.assert_failed_without_archive(self.run_build(), 95)
 
     def test_filename_with_newline_and_spaces(self):
-        self.output = self.base / "output" / "root fs\nfixture.tar.zst"
+        self.output = self.base / "output" / "root fs\nfixture.tar.xz"
         result = self.run_build()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         check = subprocess.run(["sha256sum", "--check", self.output.name + ".sha256"],

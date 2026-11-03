@@ -5,12 +5,12 @@ set +m
 usage() {
     cat <<'EOF'
 Usage:
-  build-rootfs.sh --recipe FILE --output FILE.tar.zst [OPTIONS]
+  build-rootfs.sh --recipe FILE --output FILE.tar.xz [OPTIONS]
 
 Options:
   --work-dir DIR          Parent for a unique build directory; default: TMPDIR or /tmp.
-  --threads N             Zstandard worker threads, 1..64; default: min(nproc, 4).
-  --compression-level N   Zstandard level, 1..19; default: 6.
+  --threads N             XZ worker threads, 1..64; default: min(nproc, 4).
+  --compression-level N   XZ level, 0..9; default: 6.
   --keep-work             Retain the rootfs and build.log after success as well.
   --input-rootfs FILE     Pass an existing rootfs archive as the recipe's second argument.
   -h, --help              Show help without creating resources.
@@ -76,16 +76,15 @@ while (( $# )); do
     esac
 done
 [[ -n $recipe_input && -n $output_input ]] || die '--recipe and --output are required' 2
-[[ $output_input == *.tar.zst ]] || die '--output must end in .tar.zst' 2
-positive_integer "$compression_level" 19 --compression-level
-compression_level=$REPLY
+[[ $output_input == *.tar.xz ]] || die '--output must end in .tar.xz' 2
+[[ $compression_level =~ ^[0-9]$ ]] || die '--compression-level must be from 0 to 9' 2
 if [[ -n $threads ]]; then
     positive_integer "$threads" 64 --threads
     threads=$REPLY
 fi
 
 for command in bash id realpath dirname basename mkdir mktemp chmod rm rmdir ln \
-    flock setsid unshare env ps pkill awk sleep tee tar zstd sha256sum nproc; do
+    flock setsid unshare env ps pkill awk sleep tee tar xz sha256sum nproc; do
     need_cmd "$command"
 done
 [[ $(id -u) == 0 ]] || die 'run this shell as root' 1
@@ -270,18 +269,18 @@ fi
 
 # Parameters below belong to the archive subprocess, not this shell.
 # shellcheck disable=SC2016
-run_stage 'create tar.zst' bash -c '
+run_stage 'create tar.xz' bash -c '
     set -o pipefail
     env -u TAR_OPTIONS -u POSIXLY_CORRECT tar \
         --create --file=- --format=pax --numeric-owner --sort=name \
         --pax-option=delete=atime,delete=ctime \
         --acls --xattrs --xattrs-include="*" --selinux --sparse --one-file-system \
         --directory="$1" . |
-        env -u ZSTD_CLEVEL -u ZSTD_NBTHREADS zstd --check -T"$3" -"$4" -o "$2"
+        env -u XZ_DEFAULTS -u XZ_OPT xz --compress --stdout --check=crc64 --threads="$3" -"$4" > "$2"
 ' rootfs-archive "$rootfs" "$staged_archive" "$threads" "$compression_level"
-run_stage 'verify Zstandard integrity' zstd --test -- "$staged_archive"
-run_stage 'compare archive with rootfs' env -u TAR_OPTIONS -u POSIXLY_CORRECT tar \
-    --zstd --compare --file="$staged_archive" --numeric-owner \
+run_stage 'verify XZ integrity' env -u XZ_DEFAULTS -u XZ_OPT xz --test -- "$staged_archive"
+run_stage 'compare archive with rootfs' env -u TAR_OPTIONS -u POSIXLY_CORRECT \
+    -u XZ_DEFAULTS -u XZ_OPT tar --xz --compare --file="$staged_archive" --numeric-owner \
     --acls --xattrs --xattrs-include='*' --selinux --directory="$rootfs"
 run_stage 'final rootfs and mount verification' "$common_verify" "$rootfs"
 

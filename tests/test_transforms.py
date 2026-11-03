@@ -38,7 +38,7 @@ class TransformTests(unittest.TestCase):
         self.directory = self.base / "input"
         self.directory.mkdir()
         self.stem = self.source["base_target"]["artifact_name"]
-        self.archive = self.directory / f"{self.stem}.tar.zst"
+        self.archive = self.directory / f"{self.stem}.tar.xz"
         self.archive.write_bytes(b"fixture archive; actual tar handling has separate tests")
         build = {"target": self.source["base_target"], "source_repository": self.source["repository"],
                  "source_commit": self.source["source_commit"], "workflow_run_url": self.source["run_url"],
@@ -56,7 +56,7 @@ class TransformTests(unittest.TestCase):
             return TRANSFORM.inspect_source("SiliCAT/rootfs-build", "123", "456")
 
     def resum(self):
-        names = sorted(TRANSFORM.expected_files(self.source) - {f"{self.stem}.SHA256SUMS"})
+        names = sorted(TRANSFORM.expected_files(self.source, self.archive.name) - {f"{self.stem}.SHA256SUMS"})
         (self.directory / f"{self.stem}.SHA256SUMS").write_text("".join(
             f"{TRANSFORM.target.sha256(self.directory / name)}  {name}\n" for name in names))
 
@@ -146,7 +146,7 @@ class TransformTests(unittest.TestCase):
     def zip_input(self, change=None):
         data = io.BytesIO()
         with zipfile.ZipFile(data, "w") as bundle:
-            for name in sorted(TRANSFORM.expected_files(self.source)):
+            for name in sorted(TRANSFORM.expected_files(self.source, self.archive.name)):
                 if change and name == self.archive.name:
                     change(bundle, name)
                 else:
@@ -160,6 +160,38 @@ class TransformTests(unittest.TestCase):
         TRANSFORM.unpack_artifact(self.zip_input(), destination, self.source)
         self.assertEqual(TRANSFORM.verify_input(destination, self.source)["archive"], self.archive.name)
         self.assertEqual({p.name for p in destination.iterdir()}, TRANSFORM.expected_files(self.source))
+
+    def test_legacy_zstandard_base_input_retains_its_original_names_and_provenance(self):
+        old_archive = self.archive
+        self.archive = self.archive.with_suffix(".zst")
+        old_archive.rename(self.archive)
+        checksum = self.directory / (old_archive.name + ".sha256")
+        checksum.rename(self.directory / (self.archive.name + ".sha256"))
+        (self.directory / (self.archive.name + ".sha256")).write_text(
+            f"{TRANSFORM.target.sha256(self.archive)}  {self.archive.name}\n")
+        metadata = self.directory / f"{self.stem}.build.json"
+        build = json.loads(metadata.read_text())
+        build["archive"] = self.archive.name
+        metadata.write_text(json.dumps(build))
+        self.resum()
+        destination = self.base / "legacy-input"
+        destination.mkdir()
+        TRANSFORM.unpack_artifact(self.zip_input(), destination, self.source)
+        verified = TRANSFORM.verify_input(destination, self.source)
+        self.assertEqual(verified['archive'], self.archive.name)
+        self.assertEqual(verified['base_build']['archive'], self.archive.name)
+        self.assertFalse((destination / old_archive.name).exists())
+
+    def test_zip_with_both_archive_formats_is_rejected(self):
+        archive = self.zip_input()
+        with zipfile.ZipFile(archive, 'a') as bundle:
+            bundle.writestr(self.stem + '.tar.zst', b'ambiguous input')
+        archive.seek(0)
+        destination = self.base / 'mixed-input'
+        destination.mkdir()
+        with self.assertRaises(ValueError):
+            TRANSFORM.unpack_artifact(archive, destination, self.source)
+        self.assertEqual(list(destination.iterdir()), [])
 
     def test_artifact_zip_rejects_path_traversal_and_symlinks(self):
         def traversal(bundle, name):
@@ -223,7 +255,7 @@ class TransformTests(unittest.TestCase):
         output = self.base / "output"
         output.mkdir()
         stem = self.stem + "-br-initrd"
-        archive = output / f"{stem}.tar.zst"
+        archive = output / f"{stem}.tar.xz"
         archive.write_bytes(b"final archive validated by caller")
         (output / f"{archive.name}.sha256").write_text(
             f"{TRANSFORM.target.sha256(archive)}  {archive.name}\n")

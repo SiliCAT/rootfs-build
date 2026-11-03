@@ -86,9 +86,9 @@ class TargetTests(unittest.TestCase):
         output = self.base / "output"
         output.mkdir()
         stem = "rootfs-trixie-amd64-memini"
-        archive = output / f"{stem}.tar.zst"
+        archive = output / f"{stem}.tar.xz"
         archive.write_bytes(b"metadata unit test: archive was validated by its caller")
-        (output / f"{stem}.tar.zst.sha256").write_text(
+        (output / f"{stem}.tar.xz.sha256").write_text(
             f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
         tools = self.base / "tools"
         tools.mkdir()

@@ -10,10 +10,10 @@ set -Eeuo pipefail
 usage() {
     cat <<'HELP'
 Usage:
-  recipe.sh TARGET_ROOT INPUT_ROOTFS.tar.zst
+  recipe.sh TARGET_ROOT INPUT_ROOTFS.tar.xz
   recipe.sh --help
 
-Run as root through scripts/build-rootfs.sh --input-rootfs INPUT_ROOTFS.tar.zst.
+Run as root through scripts/build-rootfs.sh --input-rootfs INPUT_ROOTFS.tar.xz.
 TARGET_ROOT must be absolute and empty. Input contains etc/, usr/, var/ directly.
 Use a native builder matching the input architecture; this recipe has no CPU
 architecture branches. Debian initramfs-tools and the target kernel are required.
@@ -248,10 +248,10 @@ step S1 "extracting tarball=$TARBALL; target=$DST_ROOT"
 archive_bytes=$(stat -Lc %s -- "$TARBALL")
 emit INFO "input archive bytes=$archive_bytes; target is the supplied system root (no extra rootfs layer)"
 extract_start=$SECONDS
-run env -u TAR_OPTIONS -u POSIXLY_CORRECT tar --extract --file="$TARBALL" \
+run env -u TAR_OPTIONS -u POSIXLY_CORRECT -u XZ_DEFAULTS -u XZ_OPT tar --extract --file="$TARBALL" \
     --numeric-owner --same-owner --same-permissions --acls --xattrs \
     --xattrs-include='*' --selinux --delay-directory-restore --directory="$DST_ROOT"
-run env -u TAR_OPTIONS -u POSIXLY_CORRECT tar --compare --file="$TARBALL" \
+run env -u TAR_OPTIONS -u POSIXLY_CORRECT -u XZ_DEFAULTS -u XZ_OPT tar --compare --file="$TARBALL" \
     --numeric-owner --acls --xattrs --xattrs-include='*' --selinux --directory="$DST_ROOT"
 # A pack-produced archive contains the system contents, not another rootfs/.
 [[ -d $DST_ROOT/etc && ! -L $DST_ROOT/etc && -d $DST_ROOT/usr && ! -L $DST_ROOT/usr ]] ||

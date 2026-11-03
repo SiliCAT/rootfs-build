@@ -11,7 +11,7 @@
 ```sh
 sudo -n scripts/build-rootfs.sh \
   --recipe recipes/amd64/trixie/vm-incusd/recipe.sh \
-  --output outputs/rootfs-trixie-amd64-vm-incusd.tar.zst
+  --output outputs/rootfs-trixie-amd64-vm-incusd.tar.xz
 ```
 
 也可在 Actions 的 **Build rootfs → Run workflow** 中选择 `amd64-trixie-vm-incusd`。
