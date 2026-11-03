@@ -11,6 +11,7 @@ on:
         options:
           - amd64-trixie-memini
           - amd64-trixie-vm-incusd
+          - amd64-trixie-vm-sandbox
 
 permissions:
   contents: read

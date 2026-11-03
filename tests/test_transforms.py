@@ -335,9 +335,9 @@ class InputCatalogTests(unittest.TestCase):
         self.assertEqual(catalog['candidates'][0]['run_attempt'], 2)
         self.assertEqual(len(self.calls), 2)
 
-    def test_sandbox_workflow_is_listed_and_accepted_by_single_id_resolution(self):
+    def test_sandbox_target_uses_the_shared_workflow_for_listing_and_resolution(self):
         artifact = dict(self.artifact, name="rootfs-trixie-amd64-vm-sandbox-123-1")
-        run = dict(self.run, path=".github/workflows/rootfs-vm-sandbox.yml")
+        run = dict(self.run)
         attempt = dict(run, run_attempt=1)
         catalog = self.query([[artifact]], runs={123: run}, attempts={(123, 1): attempt})
         self.assertEqual(catalog['candidates'][0]['target'], 'amd64-trixie-vm-sandbox')
@@ -347,18 +347,18 @@ class InputCatalogTests(unittest.TestCase):
         self.assertEqual(TRANSFORM.derived_target(source)['artifact_name'],
                          'rootfs-trixie-amd64-vm-sandbox-br-initrd')
 
-    def test_workflow_identity_must_match_the_target_in_both_directions(self):
-        for workflow, name in (
-                ('.github/workflows/rootfs.yml', 'rootfs-trixie-amd64-vm-sandbox-123-1'),
-                ('.github/workflows/rootfs-vm-sandbox.yml', self.artifact['name'])):
-            with self.subTest(workflow=workflow, name=name):
-                run = dict(self.run, path=workflow)
-                artifact = dict(self.artifact, name=name)
-                catalog = self.query([[artifact]], runs={123: run})
-                self.assertEqual(catalog['candidates'], [])
-                with mock.patch.object(TRANSFORM, 'api_json', side_effect=[artifact, run]):
-                    with self.assertRaisesRegex(TRANSFORM.SourceRejected, 'registered workflow entry'):
-                        TRANSFORM.inspect_source(self.repository, None, '456')
+    def test_retired_sandbox_entry_keeps_its_existing_artifacts_eligible(self):
+        artifact = dict(self.artifact, name="rootfs-trixie-amd64-vm-sandbox-123-1")
+        run = dict(self.run, path=".github/workflows/rootfs-vm-sandbox.yml")
+        attempt = dict(run, run_attempt=1)
+        catalog = self.query([[artifact]], runs={123: run}, attempts={(123, 1): attempt})
+        self.assertEqual(catalog['candidates'][0]['target'], 'amd64-trixie-vm-sandbox')
+        with mock.patch.object(TRANSFORM, 'api_json', side_effect=[artifact, run, attempt]):
+            self.assertEqual(TRANSFORM.inspect_source(self.repository, None, '456')['base_target']['id'],
+                             'amd64-trixie-vm-sandbox')
+        with mock.patch.object(TRANSFORM, 'api_json', side_effect=[self.artifact, run]):
+            with self.assertRaisesRegex(TRANSFORM.SourceRejected, 'registered workflow entry'):
+                TRANSFORM.inspect_source(self.repository, None, '456')
 
     def test_reusing_the_builder_does_not_make_other_workflows_valid_base_sources(self):
         artifact = dict(self.artifact, name="rootfs-trixie-amd64-vm-sandbox-123-1")
@@ -367,11 +367,12 @@ class InputCatalogTests(unittest.TestCase):
             with self.subTest(workflow=workflow):
                 self.assertEqual(self.query([[artifact]], runs={123: dict(self.run, path=workflow)})['candidates'], [])
 
-    def test_both_registered_base_targets_are_listed(self):
+    def test_all_registered_base_targets_share_the_same_workflow(self):
         memini = dict(self.artifact, id=457, name="rootfs-trixie-amd64-memini-123-1")
-        catalog = self.query([[self.artifact, memini]])
+        sandbox = dict(self.artifact, id=458, name="rootfs-trixie-amd64-vm-sandbox-123-1")
+        catalog = self.query([[self.artifact, memini, sandbox]])
         self.assertEqual({item['target'] for item in catalog['candidates']},
-                         {'amd64-trixie-vm-incusd', 'amd64-trixie-memini'})
+                         {'amd64-trixie-vm-incusd', 'amd64-trixie-memini', 'amd64-trixie-vm-sandbox'})
 
     def test_logs_transforms_removed_names_and_expired_inputs_are_filtered_before_run_queries(self):
         entries = [dict(self.artifact, id=500+i, name=name) for i, name in enumerate((

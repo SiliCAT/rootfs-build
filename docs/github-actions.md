@@ -1,17 +1,15 @@
 # GitHub Actions：amd64 rootfs 构建
 
 当前入口是 `.github/workflows/rootfs.yml`，在 Actions 页面显示为 **Build rootfs**。
-目前只有手动触发，可选 `amd64-trixie-memini` 和 `amd64-trixie-vm-incusd`，
-每次构建一个目标。Ceph 客户端配方另有固定目标入口 **Build vm-sandbox rootfs**，
-对应 `.github/workflows/rootfs-vm-sandbox.yml`、目标 `amd64-trixie-vm-sandbox`，同样调用
-共用构建工作流。所有入口均不自动推送 Release 或发布环境。
+目前只有手动触发，在同一个 `target` 下拉列表中可选 `amd64-trixie-memini`、
+`amd64-trixie-vm-incusd` 和 `amd64-trixie-vm-sandbox`，每次构建一个目标。
+统一调用共用构建工作流，不自动推送 Release 或发布环境。
 
 ## 在 GitHub 上运行
 
 1. 将代码提交并合入仓库默认分支，使 GitHub 能发现 `workflow_dispatch` 入口。
-2. 打开仓库的 **Actions → Build rootfs → Run workflow**；vm-sandbox 使用
-   **Build vm-sandbox rootfs → Run workflow**。
-3. 选择需要构建的分支和目标，启动构建；vm-sandbox 专用入口已经固定目标。
+2. 打开仓库的 **Actions → Build rootfs → Run workflow**。
+3. 选择需要构建的分支和目标，启动构建。
 4. 在该次运行的 Summary 中查看主产物链接和加工参数，在 Artifacts 中下载产物及日志。
 
 此流程不需要额外的仓库 secret。检出只申请 `contents: read`，使用 Actions 自带的
@@ -23,7 +21,6 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | --- | --- |
 | `.github/workflows/rootfs.yml` | 手动入口、目标选择、同一目标与 ref 的并发控制 |
 | `.github/workflows/rootfs-build.yml` | 共用单目标编排、容器启动、上传与诊断 |
-| `.github/workflows/rootfs-vm-sandbox.yml` | vm-sandbox 专用手动入口，固定 Ceph 客户端目标 |
 | `targets/targets.json` | 目标身份、配方路径、runner、执行方式和 builder 镜像 |
 | `scripts/prepare-builder.sh` | 在 Debian builder 内安装并检查构建工具 |
 | `scripts/run-target.sh` | 连接目标登记、归档外壳和构建记录导出 |

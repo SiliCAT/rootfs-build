@@ -27,10 +27,12 @@ MAX_ARTIFACT_BYTES = 8 * 1024**3
 CATALOG_PAGE_SIZE = 100
 CATALOG_MAX_PAGES = 10
 CATALOG_LIMIT = 20
-# Manual entry workflows are tied to the base identities they are allowed to
-# produce. Reusing the builder does not make arbitrary workflows valid sources.
+# New builds share rootfs.yml. Keep already published dedicated-entry artifacts
+# eligible after retiring that entry; each source is still tied to its target.
 BASE_WORKFLOW_TARGETS = {
-    ".github/workflows/rootfs.yml": {"amd64-trixie-memini", "amd64-trixie-vm-incusd"},
+    ".github/workflows/rootfs.yml": {
+        "amd64-trixie-memini", "amd64-trixie-vm-incusd", "amd64-trixie-vm-sandbox",
+    },
     ".github/workflows/rootfs-vm-sandbox.yml": {"amd64-trixie-vm-sandbox"},
 }
 
