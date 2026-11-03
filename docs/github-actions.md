@@ -2,13 +2,16 @@
 
 当前入口是 `.github/workflows/rootfs.yml`，在 Actions 页面显示为 **Build rootfs**。
 目前只有手动触发，可选 `amd64-trixie-memini` 和 `amd64-trixie-vm-incusd`，
-每次构建一个目标，不会自动推送 Release 或发布环境。
+每次构建一个目标。Ceph 客户端配方另有固定目标入口 **Build vm-sandbox rootfs**，
+对应 `.github/workflows/rootfs-vm-sandbox.yml`、目标 `amd64-trixie-vm-sandbox`，同样调用
+共用构建工作流。所有入口均不自动推送 Release 或发布环境。
 
 ## 在 GitHub 上运行
 
 1. 将代码提交并合入仓库默认分支，使 GitHub 能发现 `workflow_dispatch` 入口。
-2. 打开仓库的 **Actions → Build rootfs → Run workflow**。
-3. 选择需要构建的分支和目标，启动构建。
+2. 打开仓库的 **Actions → Build rootfs → Run workflow**；vm-sandbox 使用
+   **Build vm-sandbox rootfs → Run workflow**。
+3. 选择需要构建的分支和目标，启动构建；vm-sandbox 专用入口已经固定目标。
 4. 在该次运行的 Summary 中查看主产物链接和加工参数，在 Artifacts 中下载产物及日志。
 
 此流程不需要额外的仓库 secret。检出只申请 `contents: read`，使用 Actions 自带的
@@ -20,6 +23,7 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | --- | --- |
 | `.github/workflows/rootfs.yml` | 手动入口、目标选择、同一目标与 ref 的并发控制 |
 | `.github/workflows/rootfs-build.yml` | 共用单目标编排、容器启动、上传与诊断 |
+| `.github/workflows/rootfs-vm-sandbox.yml` | vm-sandbox 专用手动入口，固定 Ceph 客户端目标 |
 | `targets/targets.json` | 目标身份、配方路径、runner、执行方式和 builder 镜像 |
 | `scripts/prepare-builder.sh` | 在 Debian builder 内安装并检查构建工具 |
 | `scripts/run-target.sh` | 连接目标登记、归档外壳和构建记录导出 |
@@ -28,6 +32,7 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | `.github/workflows/rootfs-inputs.yml` | 查询可供加工的基础产物，在 Summary 展示候选清单 |
 | `recipes/amd64/trixie/memini/recipe.sh` | 独立的设备配方，继续拥有包集、配置和收尾 |
 | `recipes/amd64/trixie/vm-incusd/recipe.sh` | 独立的 Incus/来宾配方，包含仅构建期间生效的裁剪 |
+| `recipes/amd64/trixie/vm-sandbox/recipe.sh` | 独立的 Ceph 客户端/来宾配方，保留 Ceph Debian 默认策略 |
 
 目标解析只接受登记的条目，不把输入当脚本、路径或 shell 片段执行。第一版明确支持
 原生 amd64；其他架构、QEMU 和其他 runner 会被拒绝，不能仅添加一个登记就宣称已支持。
@@ -70,7 +75,7 @@ rootfs-trixie-amd64-memini.build.json
 rootfs-trixie-amd64-memini.SHA256SUMS
 ```
 
-选择 vm-incusd 时，文件名中的 `memini` 对应改为 `vm-incusd`。配方的 `verify.sh` 会在
+构建 vm-incusd 或 vm-sandbox 时，文件名中的 `memini` 对应替换为各自名称。配方的 `verify.sh` 会在
 归档前自动执行，不需要给共用工作流添加设备专用步骤。
 
 `packages.tsv` 记录最终安装的包、版本和架构，不包括仅残留配置的已卸载包。

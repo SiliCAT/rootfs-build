@@ -27,6 +27,12 @@ MAX_ARTIFACT_BYTES = 8 * 1024**3
 CATALOG_PAGE_SIZE = 100
 CATALOG_MAX_PAGES = 10
 CATALOG_LIMIT = 20
+# Manual entry workflows are tied to the base identities they are allowed to
+# produce. Reusing the builder does not make arbitrary workflows valid sources.
+BASE_WORKFLOW_TARGETS = {
+    ".github/workflows/rootfs.yml": {"amd64-trixie-memini", "amd64-trixie-vm-incusd"},
+    ".github/workflows/rootfs-vm-sandbox.yml": {"amd64-trixie-vm-sandbox"},
+}
 
 
 class SourceRejected(ValueError):
@@ -158,7 +164,8 @@ def validate_source(repository, run_id, artifact_id, run, artifact, bases, cache
     for key in ("repository", "head_repository"):
         if (run.get(key) or {}).get("full_name", "").lower() != repository.lower():
             raise SourceRejected("source run must belong to this repository")
-    if run.get("path", "").split("@", 1)[0] != ".github/workflows/rootfs.yml":
+    allowed_targets = BASE_WORKFLOW_TARGETS.get(run.get("path", "").split("@", 1)[0])
+    if allowed_targets is None:
         raise SourceRejected("source must be produced by the base rootfs workflow")
     if (artifact.get("id") != artifact_id or artifact.get("expired") is not False
             or (artifact.get("workflow_run") or {}).get("id") != run_id):
@@ -173,6 +180,8 @@ def validate_source(repository, run_id, artifact_id, run, artifact, bases, cache
     if len(matches) != 1 or matches[0][1] > run.get("run_attempt", 0):
         raise SourceRejected("artifact name must identify exactly one registered base target and run attempt")
     base, attempt = matches[0]
+    if base["id"] not in allowed_targets:
+        raise SourceRejected("source target does not match its registered workflow entry")
     selected_run = (cached_json(f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}", cache)
                     if attempt != run["run_attempt"] else run)
     if (selected_run.get("id") != run_id or selected_run.get("run_attempt") != attempt

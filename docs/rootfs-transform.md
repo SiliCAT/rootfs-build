@@ -1,8 +1,16 @@
 # 消费已有产物的 rootfs 加工工作流
 
-入口是 **Actions → Transform rootfs → Run workflow**。第一版只消费本仓库
-`Build rootfs`（`.github/workflows/rootfs.yml`）成功运行产生的基础产物，支持
-memini 和 vm-incusd 的 Debian Trixie / amd64 归档。不会重新执行基础构建。
+入口是 **Actions → Transform rootfs → Run workflow**，只消费本仓库明确登记的基础
+工作流成功运行产生的产物，支持 Debian Trixie / amd64 的 memini、vm-incusd、vm-sandbox。
+不会重新执行基础构建，也不会复制 br-initrd 配方。
+
+| 基础工作流入口 | 允许的目标 |
+| --- | --- |
+| `Build rootfs`（`.github/workflows/rootfs.yml`） | `amd64-trixie-memini`、`amd64-trixie-vm-incusd` |
+| `Build vm-sandbox rootfs`（`.github/workflows/rootfs-vm-sandbox.yml`） | `amd64-trixie-vm-sandbox` |
+
+来源校验同时核对入口和目标。共用的 `rootfs-build.yml`、加工入口以及其他未登记工作流
+不能冒充基础入口；新专用入口也不能冒用其他目标。
 
 ## 查询候选并选择输入
 
@@ -34,7 +42,7 @@ ZIP digest、五个基础文件、校验清单和构建记录，候选列表不�
 
 ## 已知产物的直接输入
 
-也可从成功的 **Build rootfs** 运行详情 **Summary** 顶部的
+也可从成功的 **Build rootfs** 或 **Build vm-sandbox rootfs** 运行详情 **Summary** 顶部的
 “供 Transform rootfs 使用”复制 `source_artifact_id`，无需先运行候选查询。
 相同的 ID 保存在诊断 ZIP 根目录 `artifact-reference.json` 的 `artifact_id` 字段中。
 
@@ -89,7 +97,9 @@ rootfs-trixie-amd64-vm-incusd-br-initrd.build.json
 rootfs-trixie-amd64-vm-incusd-br-initrd.SHA256SUMS
 ```
 
-memini 使用对应的基础名称。主产物保留 14 天，诊断日志保留 7 天。
+memini、vm-sandbox 使用各自的基础名称；后者输出
+`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.zst` 及同名前缀的构建记录。
+主产物保留 14 天，诊断日志保留 7 天。
 
 `.build.json` 的顶层代码提交和运行 URL 指本次加工；`base_build` 保留完整的基础构建
 记录；`input` 记录原始 run/attempt/artifact ID、归档名和 SHA-256；`transform` 记录

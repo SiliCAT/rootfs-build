@@ -70,4 +70,7 @@ br_if_mac=aa:bb:cc:dd:ee:ff
 或内建支持，以及目标模块 vermagic。归档外壳随后执行挂载检查、压缩完整性、目录
 比较和 SHA-256 验证。实际启动、网络设备发现和 DHCP 行为仍须启动测试。
 
+memini、vm-incusd 和 vm-sandbox 共用本配方。vm-sandbox 的专用基础工作流已登记到来源
+校验中，可从候选清单选择其 artifact ID，输出名称保留 `vm-sandbox-br-initrd`。
+
 GitHub 入口、来源 ID 获取及最终产物说明见 [加工工作流](../../../docs/rootfs-transform.md)。
