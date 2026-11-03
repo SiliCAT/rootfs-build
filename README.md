@@ -1,6 +1,6 @@
 # rootfs-build
 
-按独立配方构建 rootfs，并交付保留 Linux 文件元数据的 `tar.zst` 压缩包。
+按独立配方构建 rootfs，并交付保留 Linux 文件元数据的 `tar.xz` 压缩包。
 
 - [构建外壳与产物接口](docs/artifacts.md)
 - [GitHub Actions 构建](docs/github-actions.md)
@@ -14,7 +14,7 @@
 ```sh
 sudo -n scripts/build-rootfs.sh \
   --recipe recipes/amd64/trixie/memini/recipe.sh \
-  --output outputs/rootfs-trixie-amd64-memini.tar.zst
+  --output outputs/rootfs-trixie-amd64-memini.tar.xz
 ```
 
 GitHub 上统一从 **Actions → Build rootfs → Run workflow** 手动选择 memini、vm-incusd 或 vm-sandbox。

@@ -16,7 +16,7 @@ memini、vm-incusd 和 vm-sandbox 共用这个手动入口。
 ```sh
 sudo -n scripts/build-rootfs.sh \
   --recipe recipes/amd64/trixie/vm-sandbox/recipe.sh \
-  --output outputs/rootfs-trixie-amd64-vm-sandbox.tar.zst
+  --output outputs/rootfs-trixie-amd64-vm-sandbox.tar.xz
 ```
 
 配方只接收空的、真实且可写的绝对路径 `TARGET_ROOT`；外壳负责私有挂载命名空间、
@@ -24,7 +24,7 @@ sudo -n scripts/build-rootfs.sh \
 
 成功的构建产物会出现在 **List rootfs inputs** 中。将其 artifact ID 填入
 **Transform rootfs** 即可使用共享的 br-initrd 加工，输出名称为
-`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.zst`。来源校验接受统一基础入口的登记目标，并兼容旧专用入口已有的成功产物；不接受加工结果作为基础输入。
+`rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.xz`。来源校验接受统一基础入口的登记目标，并兼容旧专用入口已有的成功产物；不接受加工结果作为基础输入。
 更新默认分支后，GitHub Actions 的目标列表即可显示 vm-sandbox。
 
 ## 包集和系统策略

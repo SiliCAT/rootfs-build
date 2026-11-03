@@ -38,7 +38,7 @@ trap 'stop INT 130' INT
 trap 'stop TERM 143' TERM
 "$script_dir/build-rootfs.sh" --recipe "$repository/transforms/trixie/br-initrd/recipe.sh" \
     --input-rootfs "$state/input/${input_fields[1]}" \
-    --output "$state/output/${input_fields[2]}.tar.zst" --work-dir "$state/work" \
+    --output "$state/output/${input_fields[2]}.tar.xz" --work-dir "$state/work" \
     --threads 2 --keep-work &
 build_pid=$!
 if wait "$build_pid"; then rc=0; else rc=$?; fi

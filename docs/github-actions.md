@@ -65,12 +65,16 @@ runner 的运行内核仅作为构建环境信息记录。ZFS 的目标版本、
 成功 artifact 名包含目标、run ID 和 attempt，默认保留 14 天；内部包括：
 
 ```text
-rootfs-trixie-amd64-memini.tar.zst
-rootfs-trixie-amd64-memini.tar.zst.sha256
+rootfs-trixie-amd64-memini.tar.xz
+rootfs-trixie-amd64-memini.tar.xz.sha256
 rootfs-trixie-amd64-memini.packages.tsv
 rootfs-trixie-amd64-memini.build.json
 rootfs-trixie-amd64-memini.SHA256SUMS
 ```
+
+所有基础目标和 br-initrd 加工结果均使用 XZ 压缩的 tar 归档，默认 level 6、CRC64
+校验。构建记录的压缩工具版本记录为 `xz`。Actions artifact 的 ZIP 压缩仍关闭，
+避免对已经压缩的归档重复压缩。
 
 构建 vm-incusd 或 vm-sandbox 时，文件名中的 `memini` 对应替换为各自名称。配方的 `verify.sh` 会在
 归档前自动执行，不需要给共用工作流添加设备专用步骤。
@@ -113,9 +117,9 @@ JSON 格式版本是 `schema_version: 1`，基础构建使用 `kind: "base"`，�
 | `run_id`、`run_attempt`、`run_url` | 本次运行、尝试次数和运行链接，两个数字字段为整数 |
 | `artifact_id`、`artifact_name`、`artifact_url` | 主 rootfs artifact 的 ID、名称和下载链接 |
 | `artifact_digest` | 整个 Actions artifact 的 digest，统一为 `sha256:` 加十六进制值 |
-| `archive`、`archive_sha256` | artifact 内 `.tar.zst` 文件名及其 SHA-256，后者不含前缀 |
+| `archive`、`archive_sha256` | artifact 内 `.tar.xz` 文件名及其 SHA-256，后者不含前缀 |
 
-Actions artifact digest 与 `.tar.zst` SHA-256 对应不同对象，不应混用。
+Actions artifact digest 与 `.tar.xz` SHA-256 对应不同对象，不应混用。
 回执随诊断包保留 7 天；主产物保留 14 天。
 
 主产物上传失败或跳过时，不生成有效回执，诊断上传仍按原有 `always()` 条件尝试执行。

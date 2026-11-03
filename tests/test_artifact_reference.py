@@ -39,7 +39,7 @@ class ArtifactReferenceTests(unittest.TestCase):
             "target": {"id": "amd64-trixie-vm-incusd", "artifact_name": "rootfs-trixie-amd64-vm-incusd"},
             "source_repository": self.repository, "source_commit": "b" * 40,
             "workflow_run_url": self.run_url,
-            "archive": "rootfs-trixie-amd64-vm-incusd.tar.zst",
+            "archive": "rootfs-trixie-amd64-vm-incusd.tar.xz",
             "archive_sha256": hashlib.sha256(b"fixture rootfs archive").hexdigest(),
         }
 
@@ -51,7 +51,7 @@ class ArtifactReferenceTests(unittest.TestCase):
         value = copy.deepcopy(self.metadata)
         value["target"]["id"] += "-br-initrd"
         value["target"]["artifact_name"] += "-br-initrd"
-        value["archive"] = value["target"]["artifact_name"] + ".tar.zst"
+        value["archive"] = value["target"]["artifact_name"] + ".tar.xz"
         value["transform"] = {"transform": "br-initrd"}
         value["base_build"] = base
         value["input"] = {
@@ -83,7 +83,7 @@ class ArtifactReferenceTests(unittest.TestCase):
         stem = self.metadata["target"]["artifact_name"]
         self.metadata_path = self.output / (stem + ".build.json")
         self.metadata_path.write_text(json.dumps(self.metadata))
-        for suffix in (".tar.zst", ".tar.zst.sha256", ".packages.tsv", ".SHA256SUMS"):
+        for suffix in (".tar.xz", ".tar.xz.sha256", ".packages.tsv", ".SHA256SUMS"):
             (self.output / (stem + suffix)).write_bytes(b"immutable uploaded fixture")
         before = {path.name: path.read_bytes() for path in self.output.iterdir()}
         result = self.run_cli()
@@ -140,6 +140,22 @@ class ArtifactReferenceTests(unittest.TestCase):
         self.assertIsNone(json.loads(self.receipt.read_text())["input"]["artifact_digest"])
         self.assertIn("未提供", self.summary.read_text())
 
+    def test_xz_transform_can_reference_a_legacy_zstandard_base_archive(self):
+        metadata = self.transform_metadata()
+        legacy_name = metadata['base_build']['archive'].removesuffix('.xz') + '.zst'
+        metadata['base_build']['archive'] = legacy_name
+        metadata['input']['archive'] = legacy_name
+        result = self.run_cli(metadata, kind='transform')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        reference = json.loads(self.receipt.read_text())
+        self.assertTrue(reference['archive'].endswith('.tar.xz'))
+        self.assertEqual(reference['input']['archive'], legacy_name)
+
+    def test_new_upload_receipts_require_xz_even_though_legacy_inputs_are_supported(self):
+        metadata = copy.deepcopy(self.metadata)
+        metadata['archive'] = metadata['archive'].removesuffix('.xz') + '.zst'
+        self.assert_no_reference(self.run_cli(metadata))
+
     def test_prefixed_action_digest_is_also_accepted(self):
         result = self.run_cli(environment=dict(self.environment, ROOTFS_ARTIFACT_DIGEST="sha256:" + "c" * 64))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -167,7 +183,7 @@ class ArtifactReferenceTests(unittest.TestCase):
 
     def test_metadata_from_another_build_is_rejected(self):
         for changes in ({"source_commit": "a" * 40}, {"source_repository": "other/repo"},
-                        {"workflow_run_url": self.run_url + "0"}, {"archive": "wrong.tar.zst"},
+                        {"workflow_run_url": self.run_url + "0"}, {"archive": "wrong.tar.xz"},
                         {"archive_sha256": "invalid"}):
             with self.subTest(changes=changes):
                 self.assert_no_reference(self.run_cli(dict(self.metadata, **changes)))

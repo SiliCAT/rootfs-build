@@ -27,7 +27,7 @@ trap 'stop HUP 129' HUP
 trap 'stop INT 130' INT
 trap 'stop TERM 143' TERM
 "$script_dir/build-rootfs.sh" --recipe "$repository/$recipe" \
-    --output "$state/output/$artifact.tar.zst" --work-dir "$state/work" \
+    --output "$state/output/$artifact.tar.xz" --work-dir "$state/work" \
     --threads 2 --keep-work &
 build_pid=$!
 if wait "$build_pid"; then rc=0; else rc=$?; fi

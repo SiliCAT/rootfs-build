@@ -27,11 +27,12 @@ def digest(value, description, optional=False):
     return value if value.startswith("sha256:") else "sha256:" + value
 
 
-def identity(metadata):
+def identity(metadata, allow_legacy=False):
     target = metadata["target"]
     target_id = checked(target["id"], r"[a-z0-9][a-z0-9-]*", "target ID")
     stem = checked(target["artifact_name"], r"rootfs-[a-z0-9][a-z0-9-]*", "artifact stem")
-    if metadata["archive"] != stem + ".tar.zst":
+    suffixes = (".tar.xz", ".tar.zst") if allow_legacy else (".tar.xz",)
+    if metadata["archive"] not in tuple(stem + suffix for suffix in suffixes):
         raise ValueError("archive name does not match the target")
     return target_id, stem
 
@@ -41,7 +42,7 @@ def source_reference(metadata, server):
     source, base = metadata["input"], metadata["base_build"]
     if any(key in base for key in ("input", "base_build", "transform")):
         raise ValueError("transform source must be a base build")
-    target_id, stem = identity(base)
+    target_id, stem = identity(base, allow_legacy=True)
     repository = checked(source["repository"], r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", "source repository")
     commit = checked(base["source_commit"], r"[0-9a-f]{40}", "base source commit")
     run_id = positive_id(source["run_id"], "source run ID")
