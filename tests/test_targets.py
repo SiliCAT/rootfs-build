@@ -33,6 +33,12 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(target["recipe"], "recipes/amd64/trixie/vm-incusd/recipe.sh")
         self.assertEqual(target["platform"], "linux/amd64")
 
+    def test_registered_vm_sandbox_target(self):
+        target = TARGET.resolve("amd64-trixie-vm-sandbox")
+        self.assertEqual(target["artifact_name"], "rootfs-trixie-amd64-vm-sandbox")
+        self.assertEqual(target["recipe"], "recipes/amd64/trixie/vm-sandbox/recipe.sh")
+        self.assertEqual(target["platform"], "linux/amd64")
+
     def test_unknown_target_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown target"):
             TARGET.resolve("unregistered-target")
