@@ -31,7 +31,9 @@ artifact ID 后，自动选择 ARM runner 和公共 br-initrd 配方，输出
 - 明确保留五个 Incus 服务/socket mask，以及原有 rsyslog、qemu-guest-agent、
   open-vm-tools mask；不初始化 Incus 存储池、网络或运行状态。
 - 不写入 root subordinate ID 范围，不写入 `90-zfs-arc-rpi4-4g.conf`；它们属于
-  实例初始化。账户管理工具自行生成的其他正常配置不作整文件清空。
+  实例初始化。`incus-base` 的安装脚本会自动分配 root 范围，因此 mmdebstrap 返回后
+  还会移除 subuid/subgid 及其 `-` 备份中的 root 条目；保留其他用户、注释及文件权限，
+  不作整文件清空。最终验收同时检查活动文件和备份。
 
 ## 内核、initrd、DTB 边界
 

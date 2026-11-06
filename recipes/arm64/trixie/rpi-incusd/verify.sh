@@ -15,7 +15,7 @@ for path in etc/build-meta usr/sbin/policy-rc.d var/lib/dbus/machine-id \
     [[ ! -e $root/$path && ! -L $root/$path ]] || fail "unexpected build or instance state: $path"
 done
 [[ -f $root/etc/machine-id && ! -s $root/etc/machine-id ]] || fail 'machine-id must be empty'
-for name in subuid subgid; do
+for name in subuid subgid subuid- subgid-; do
     if [[ -f $root/etc/$name ]] && grep -q '^root:' "$root/etc/$name"; then
         fail "root subordinate ID policy belongs to instance initialization: $name"
     fi

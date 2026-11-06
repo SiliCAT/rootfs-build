@@ -61,6 +61,8 @@ need_cmd install
 need_cmd rm
 need_cmd truncate
 need_cmd chroot
+need_cmd awk
+need_cmd mktemp
 
 [ "$(id -u)" -eq 0 ] || die 'this recipe must run as root' 1
 
@@ -501,6 +503,20 @@ EOF
 # ---------------------------------------------------------------------------
 
 echo "[RPI-INCUSD 3/3] 严格配方收尾（构建期策略、唯一性、日志、history）"
+
+# incus-base postinst allocates root subids even without recipe configuration.
+# Remove that instance policy only after all package/mmdebstrap hooks finish.
+# Preserve other users, comments, permissions and ownership; filter backups too.
+for subid_name in subuid subgid subuid- subgid-; do
+    subid_path=${TARGET_ROOT}/etc/${subid_name}
+    [ ! -L "${subid_path}" ] || die "subordinate ID file is a symlink: ${subid_name}" 95
+    [ -e "${subid_path}" ] || continue
+    [ -f "${subid_path}" ] || die "subordinate ID path is not a regular file: ${subid_name}" 95
+    subid_filtered=$(mktemp "${TARGET_ROOT}/etc/.rootfs-subids.XXXXXX")
+    awk -F: '$1 != "root"' "${subid_path}" > "${subid_filtered}"
+    cat -- "${subid_filtered}" > "${subid_path}"
+    rm -f -- "${subid_filtered}"
+done
 
 # Wait until mmdebstrap has finished its own service-policy handling.
 rm -f -- "${TARGET_ROOT}/usr/sbin/policy-rc.d"

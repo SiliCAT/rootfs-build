@@ -87,6 +87,61 @@ raise SystemExit(37)
                 self.assertIn(f'Native {expected} builder required', result.stderr)
                 self.assertFalse((self.base/'args.json').exists())
 
+    def finalize_fixture(self, package_result):
+        # Simulate the filesystem left by successful package installation, then
+        # execute the real post-mmdebstrap finalization (without package hooks).
+        self.tool('mmdebstrap', '''#!/usr/bin/env python3
+import os, shutil, sys
+from pathlib import Path
+root = Path(sys.argv[sys.argv.index('trixie') + 1])
+shutil.copytree(os.environ['PACKAGE_RESULT'], root, dirs_exist_ok=True, symlinks=True)
+''')
+        return subprocess.run([str(RECIPE), str(self.root)],
+                              env=dict(self.environment, PACKAGE_RESULT=str(package_result)),
+                              capture_output=True, text=True, timeout=5)
+
+    @unittest.skipUnless(os.geteuid() == 0, 'requires root for finalization ownership checks')
+    def test_finalization_removes_package_root_subids_and_preserves_other_entries(self):
+        package_result = self.base/'package-result'
+        (package_result/'etc').mkdir(parents=True)
+        contents = ('# package-generated allocations\nroot:1000000:1000000000\n'
+                    'silicat:2000000000:65536\nrootless:2100000000:65536\nroot:100000:65536\n')
+        expected = ('# package-generated allocations\nsilicat:2000000000:65536\n'
+                    'rootless:2100000000:65536\n')
+        for name in ('subuid', 'subgid', 'subuid-', 'subgid-'):
+            path = package_result/'etc'/name
+            path.write_text(contents)
+            path.chmod(0o640)
+        result = self.finalize_fixture(package_result)
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        for name in ('subuid', 'subgid', 'subuid-', 'subgid-'):
+            path = self.root/'etc'/name
+            self.assertEqual(path.read_text(), expected)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+            self.assertEqual((path.stat().st_uid, path.stat().st_gid), (0, 0))
+        self.assertFalse(list((self.root/'etc').glob('.rootfs-subids.*')))
+
+    @unittest.skipUnless(os.geteuid() == 0, 'requires root for finalization ownership checks')
+    def test_finalization_does_not_create_missing_subid_files(self):
+        package_result = self.base/'package-result'
+        package_result.mkdir()
+        result = self.finalize_fixture(package_result)
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        for name in ('subuid', 'subgid', 'subuid-', 'subgid-'):
+            self.assertFalse((self.root/'etc'/name).exists())
+
+    @unittest.skipUnless(os.geteuid() == 0, 'requires root for finalization ownership checks')
+    def test_finalization_rejects_subid_symlink_without_changing_its_target(self):
+        package_result = self.base/'package-result'
+        (package_result/'etc').mkdir(parents=True)
+        outside = self.base/'outside'
+        outside.write_text('root:1000000:1000000000\n')
+        (package_result/'etc/subuid').symlink_to(outside)
+        result = self.finalize_fixture(package_result)
+        self.assertEqual(result.returncode, 95, result.stdout+result.stderr)
+        self.assertIn('subordinate ID file is a symlink', result.stderr)
+        self.assertEqual(outside.read_text(), 'root:1000000:1000000000\n')
+
     def test_hooks_have_valid_shell_syntax_and_no_instance_policies(self):
         args = self.capture()
         for hook in (arg.split('=', 1)[1] for arg in args if re.match('--(?:setup|customize)-hook=', arg)):
