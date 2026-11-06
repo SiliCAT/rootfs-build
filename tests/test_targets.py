@@ -39,6 +39,19 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(target["recipe"], "recipes/amd64/trixie/vm-sandbox/recipe.sh")
         self.assertEqual(target["platform"], "linux/amd64")
 
+    def test_registered_arm64_target_selects_native_arm_backend(self):
+        resolved = TARGET.resolve("arm64-trixie-rpi-incusd")
+        self.assertEqual(resolved["artifact_name"], "rootfs-trixie-arm64-rpi-incusd")
+        self.assertEqual(resolved["recipe"], "recipes/arm64/trixie/rpi-incusd/recipe.sh")
+        self.assertEqual(resolved["architecture"], "arm64")
+        self.assertEqual(resolved["platform"], "linux/arm64")
+        self.assertEqual(resolved["runner"], "ubuntu-24.04-arm")
+
+    def test_crossed_native_runner_is_rejected(self):
+        self.registry(runner="ubuntu-24.04-arm")
+        with mock.patch.object(TARGET, "REPOSITORY", self.base), self.assertRaisesRegex(ValueError, "unsupported"):
+            TARGET.resolve(TARGET_ID)
+
     def test_unknown_target_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown target"):
             TARGET.resolve("unregistered-target")

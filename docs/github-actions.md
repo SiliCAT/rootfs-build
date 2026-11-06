@@ -1,8 +1,8 @@
-# GitHub Actions：amd64 rootfs 构建
+# GitHub Actions：amd64 / arm64 rootfs 构建
 
 当前入口是 `.github/workflows/rootfs.yml`，在 Actions 页面显示为 **Build rootfs**。
 目前只有手动触发，在同一个 `target` 下拉列表中可选 `amd64-trixie-memini`、
-`amd64-trixie-vm-incusd` 和 `amd64-trixie-vm-sandbox`，每次构建一个目标。
+`amd64-trixie-vm-incusd`、`amd64-trixie-vm-sandbox` 和 `arm64-trixie-rpi-incusd`，每次构建一个目标。
 统一调用共用构建工作流，不自动推送 Release 或发布环境。
 
 ## 在 GitHub 上运行
@@ -30,15 +30,18 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | `recipes/amd64/trixie/memini/recipe.sh` | 独立的设备配方，继续拥有包集、配置和收尾 |
 | `recipes/amd64/trixie/vm-incusd/recipe.sh` | 独立的 Incus/来宾配方，包含仅构建期间生效的裁剪 |
 | `recipes/amd64/trixie/vm-sandbox/recipe.sh` | 独立的 Ceph 客户端/来宾配方，保留 Ceph Debian 默认策略 |
+| `recipes/arm64/trixie/rpi-incusd/recipe.sh` | 独立的树莓派/ZFS/Incus 配方，不包含实例 ARC 与 subordinate ID 策略 |
+| `scripts/raspi-firmware.py` | 验收目标 kernel/initrd 配对及 firmware 副本、DTB 集合 |
 
-目标解析只接受登记的条目，不把输入当脚本、路径或 shell 片段执行。第一版明确支持
-原生 amd64；其他架构、QEMU 和其他 runner 会被拒绝，不能仅添加一个登记就宣称已支持。
+目标解析只接受登记的条目，不把输入当脚本、路径或 shell 片段执行。原生执行仅接受
+amd64/ubuntu-24.04/linux/amd64 和 arm64/ubuntu-24.04-arm/linux/arm64 两组匹配关系；
+其他架构、QEMU 和混搭 runner 会被拒绝。
 这不是配方继承系统。
 
 ## 构建环境
 
-使用 `ubuntu-24.04` 托管 runner，通过 Docker 运行 digest 固定的 Debian Trixie slim
-镜像；checkout 和 upload-artifact 也固定到提交 SHA。
+amd64 使用 `ubuntu-24.04`，arm64 使用 `ubuntu-24.04-arm` 托管 runner，通过 Docker
+选择对应平台运行 digest 固定的 Debian Trixie slim 多架构镜像；checkout 和 upload-artifact 也固定到提交 SHA。
 
 容器使用 root、`--privileged` 和 `--init`，以满足 mmdebstrap 的挂载、chroot 和
 进程回收需求。仓库只读挂载到 `/work`，本次运行的临时状态目录挂载到 `/build`。
@@ -58,7 +61,7 @@ CPU affinity 限定为 runner 可用 CPU 中的前两个，使依赖 nproc 的 D
 软件源，以及 GitHub Actions 的检出和 artifact 服务。
 
 runner 的运行内核仅作为构建环境信息记录。ZFS 的目标版本、headers、模块及 initramfs
-由配方在 rootfs 内安装、构建和检查。实际启动、模块加载和 memini 硬件仍需要单独验收。
+由配方在 rootfs 内安装、构建和检查。实际启动、模块加载和设备硬件仍需要单独验收。
 
 ## 成功产物
 
@@ -78,6 +81,8 @@ rootfs-trixie-amd64-memini.SHA256SUMS
 
 构建 vm-incusd 或 vm-sandbox 时，文件名中的 `memini` 对应替换为各自名称。配方的 `verify.sh` 会在
 归档前自动执行，不需要给共用工作流添加设备专用步骤。
+rpi-incusd 对应 `rootfs-trixie-arm64-rpi-incusd` 前缀，同样输出五个文件；
+不额外创建启动分区或磁盘镜像。
 
 `packages.tsv` 记录最终安装的包、版本和架构，不包括仅残留配置的已卸载包。
 `build.json` 记录源码提交、运行链接、固定 builder、工具版本、目标内核、ZFS 包版本、

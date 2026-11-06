@@ -3,11 +3,10 @@
 主业务集中在 [recipe.sh](recipe.sh)。它消费已有 Debian Trixie rootfs 归档，输出
 供通用外壳重新归档的目录，不执行 mmdebstrap，不创建磁盘镜像。
 
-配方不含 CPU 架构分支：工具、库和内核模块均取自输入 rootfs。当前工作流只开放
-经过验证的 amd64 原生执行环境；共享脚本不表示已经验证 arm64、armel 等执行后端。
-以后新增架构时，在调度层登记并验证原生 runner、容器平台和固定 digest 的 builder，
-继续使用这一个业务文件。当前依赖 Debian Trixie 的 initramfs-tools，不能据此宣称
-支持任意发行版或没有内核的容器 rootfs。
+配方不含 CPU 架构分支：工具、库和内核模块均取自输入 rootfs。工作流支持 amd64 和
+arm64 原生执行，按输入自动选择 runner、容器平台及固定 digest 的 builder。
+armel 等其他架构仍明确拒绝，不能仅因共享脚本就宣称支持。当前依赖 Debian Trixie
+的 initramfs-tools，不能据此宣称支持任意发行版或没有内核的容器 rootfs。
 
 ## 调用
 
@@ -31,6 +30,7 @@ sudo -n scripts/build-rootfs.sh \
 `BR_INITRD_REPORT` 是可选的构建记录输出路径，须为目标 rootfs 之外、尚不存在的
 绝对文件路径。`run-transform.sh` 将其设为状态目录中的 `br-initrd.report.json`，
 记录最终验收的 initramfs 路径、内核版本和 SHA-256；不写入最终系统。
+配方调用构建侧 Python 验收器，因此直接使用该配方的 builder 也必须提供 Python 3。
 
 ## 注入业务
 
@@ -72,7 +72,11 @@ br_if_mac=aa:bb:cc:dd:ee:ff
 或内建支持，以及目标模块 vermagic。归档外壳随后执行挂载检查、压缩完整性、目录
 比较和 SHA-256 验证。实际启动、网络设备发现和 DHCP 行为仍须启动测试。
 
-memini、vm-incusd 和 vm-sandbox 共用本配方及统一的 Build rootfs 基础入口。
+输入安装了 raspi-firmware 时，最终还会调用公共验收器比较 /boot/firmware 的内核、
+initramfs 副本与 /boot 原文件，并核对配套 DTB。副本失同步直接失败，不自行改写
+实例 cmdline 或改变 `update-initramfs -u` 的内核选择规则。
+
+memini、vm-incusd、vm-sandbox 和 arm64 rpi-incusd 共用本配方及统一的 Build rootfs 基础入口。
 可从候选清单选择 vm-sandbox 的 artifact ID，输出名称保留 `vm-sandbox-br-initrd`。
 
 GitHub 入口、来源 ID 获取及最终产物说明见 [加工工作流](../../../docs/rootfs-transform.md)。

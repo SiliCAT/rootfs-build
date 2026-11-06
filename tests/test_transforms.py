@@ -99,7 +99,7 @@ class TransformTests(unittest.TestCase):
                 TRANSFORM.inspect_source("SiliCAT/rootfs-build", "123", "456")
 
     def test_unsupported_architecture_has_no_implicit_fallback(self):
-        for architecture in ("arm64", "armel", "unknown"):
+        for architecture in ("armel", "armhf", "unknown"):
             with self.subTest(architecture=architecture), self.assertRaisesRegex(ValueError, "backend"):
                 TRANSFORM.backend(architecture)
 
@@ -379,6 +379,23 @@ class InputCatalogTests(unittest.TestCase):
         self.assertEqual(TRANSFORM.derived_target(source)['artifact_name'],
                          'rootfs-trixie-amd64-vm-sandbox-br-initrd')
 
+    def test_arm64_input_is_listed_and_selects_native_arm_transform(self):
+        artifact = dict(self.artifact, name="rootfs-trixie-arm64-rpi-incusd-123-1")
+        catalog = self.query([[artifact]])
+        self.assertEqual(catalog['candidates'][0]['target'], 'arm64-trixie-rpi-incusd')
+        self.assertIn('arm64-trixie-rpi-incusd', TRANSFORM.render_inputs(catalog))
+        with mock.patch.object(TRANSFORM, 'api_json', side_effect=[
+                artifact, self.run, dict(self.run, run_attempt=1)]):
+            source = TRANSFORM.inspect_source(self.repository, None, '456')
+        self.assertEqual(source['backend']['runner'], 'ubuntu-24.04-arm')
+        self.assertEqual(source['backend']['platform'], 'linux/arm64')
+        derived = TRANSFORM.derived_target(source)
+        self.assertEqual(derived['architecture'], 'arm64')
+        self.assertEqual(derived['recipe'], 'transforms/trixie/br-initrd/recipe.sh')
+        self.assertEqual(derived['artifact_name'], 'rootfs-trixie-arm64-rpi-incusd-br-initrd')
+        retired = dict(self.run, path='.github/workflows/rootfs-vm-sandbox.yml')
+        self.assertEqual(self.query([[artifact]], runs={123: retired})['candidates'], [])
+
     def test_retired_sandbox_entry_keeps_its_existing_artifacts_eligible(self):
         artifact = dict(self.artifact, name="rootfs-trixie-amd64-vm-sandbox-123-1")
         run = dict(self.run, path=".github/workflows/rootfs-vm-sandbox.yml")
@@ -402,9 +419,11 @@ class InputCatalogTests(unittest.TestCase):
     def test_all_registered_base_targets_share_the_same_workflow(self):
         memini = dict(self.artifact, id=457, name="rootfs-trixie-amd64-memini-123-1")
         sandbox = dict(self.artifact, id=458, name="rootfs-trixie-amd64-vm-sandbox-123-1")
-        catalog = self.query([[self.artifact, memini, sandbox]])
+        rpi = dict(self.artifact, id=459, name="rootfs-trixie-arm64-rpi-incusd-123-1")
+        catalog = self.query([[self.artifact, memini, sandbox, rpi]])
         self.assertEqual({item['target'] for item in catalog['candidates']},
-                         {'amd64-trixie-vm-incusd', 'amd64-trixie-memini', 'amd64-trixie-vm-sandbox'})
+                         {'amd64-trixie-vm-incusd', 'amd64-trixie-memini', 'amd64-trixie-vm-sandbox',
+                          'arm64-trixie-rpi-incusd'})
 
     def test_logs_transforms_removed_names_and_expired_inputs_are_filtered_before_run_queries(self):
         entries = [dict(self.artifact, id=500+i, name=name) for i, name in enumerate((
