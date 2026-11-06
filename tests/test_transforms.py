@@ -1,6 +1,7 @@
 """Artifact selection, input integrity and final transform provenance without network."""
 
 import importlib.util
+import csv
 from datetime import datetime, timezone
 from contextlib import nullcontext, redirect_stderr, redirect_stdout
 import hashlib
@@ -264,13 +265,29 @@ class TransformTests(unittest.TestCase):
         (tools / "mmdebstrap").write_text("#!/bin/sh\nprintf 'mmdebstrap fixture\\n'\n")
         (tools / "mmdebstrap").chmod(0o755)
         with mock.patch.dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"]):
-            TRANSFORM.export_transform(self.directory, root, output, report)
+            # Foreign packages gain an architecture suffix on ARM runners.
+            # Multi-Arch: same also forces it on amd64, covering both forms locally.
+            for multi_arch_same in (False, True):
+                with self.subTest(multi_arch_same=multi_arch_same):
+                    if multi_arch_same:
+                        status = database / "status"
+                        status.write_text(status.read_text().replace(
+                            "Architecture: amd64\n", "Architecture: amd64\nMulti-Arch: same\n"))
+                    TRANSFORM.export_transform(self.directory, root, output, report)
+                    manifest = list(csv.DictReader(io.StringIO(
+                        (output / f"{stem}.packages.tsv").read_text()), delimiter="\t"))
+                    self.assertEqual(len(manifest), 1)
+                    row = manifest[0]
+                    self.assertIn(row["package"], ("final-package", "final-package:amd64"))
+                    self.assertEqual(row["version"], "2")
+                    self.assertEqual(row["architecture"], "amd64")
+                    if multi_arch_same:
+                        self.assertEqual(row["package"], "final-package:amd64")
         metadata = json.loads((output / f"{stem}.build.json").read_text())
         self.assertEqual(metadata["input"]["artifact_id"], 456)
         self.assertEqual(metadata["base_build"]["source_commit"], "a" * 40)
         self.assertEqual(metadata["transform"]["accepted_initramfs"][0]["kernel"], kernel)
         self.assertEqual(metadata["installed_package_count"], 1)
-        self.assertIn("final-package\t2\tamd64", (output / f"{stem}.packages.tsv").read_text())
         image.write_bytes(b"unexpected later modification")
         with self.assertRaisesRegex(ValueError, "changed after verification"):
             TRANSFORM.export_transform(self.directory, root, output, report)
