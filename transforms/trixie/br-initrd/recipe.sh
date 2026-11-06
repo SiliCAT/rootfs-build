@@ -136,25 +136,74 @@ CONTENTS=$(find "$DST_ROOT" -mindepth 1 -maxdepth 1 -printf x) || die 'cannot in
 unset CONTENTS
 [[ -r /proc/self/mountinfo ]] || die '/proc/self/mountinfo must be readable' 90
 
-# VIEW_ID is '-' when absent. Refuse stacked mounts or an unreadable table.
-# All paths passed here are canonical; decode kernel mountinfo escapes first.
+# Inspect one mount subtree from a single snapshot. Keep mountinfo escaping in
+# diagnostics so paths containing spaces/newlines remain unambiguous in logs.
+# Reject stacked roots, invalid ancestry and malformed tables before unmounting.
 inspect_view() {
     local report
+    VIEW_ID=- VIEW_CHILDREN=0 VIEW_PRIVATE=0 VIEW_MOUNTS=
     report=$(BR_VIEW_PATH="$1" awk '
-    function dec(s) {
-        gsub(/\\040/," ",s); gsub(/\\011/,"\t",s)
-        gsub(/\\012/,"\n",s); gsub(/\\134/,sprintf("%c",92),s); return s
+    function dec(s,    i,e,c,r) {
+        r=""
+        for(i=1;i<=length(s);i++) {
+            c=substr(s,i,1)
+            if(c=="\\" && i+3<=length(s)) {
+                e=substr(s,i+1,3)
+                if(e=="040") {c=" "; i+=3}
+                else if(e=="011") {c=sprintf("%c",9); i+=3}
+                else if(e=="012") {c=sprintf("%c",10); i+=3}
+                else if(e=="134") {c=sprintf("%c",92); i+=3}
+            }
+            r=r c
+        }
+        return r
     }
-    BEGIN { wanted=ENVIRON["BR_VIEW_PATH"]; count=0; children=0; id="-"; valid=0 }
-    NF>=10 && / - / {
-        p=dec($5); if(p=="/") valid=1
+    BEGIN { wanted=ENVIRON["BR_VIEW_PATH"]; count=0; children=0; id="-"; private=1 }
+    {
+        rows++
+        separator=0
+        for(j=7;j<=NF;j++) if($j=="-") {separator=j; break}
+        if(NF<10 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ ||
+           !separator || separator+3>NF || ($1 in parents)) {bad=1; next}
+        parents[$1]=$2
+        p=dec($5)
+        if(p=="/") valid=1
         if(p==wanted) {count++; id=$1}
         else if(index(p,wanted "/")==1) children++
+        else next
+        selected[$1]=1
+        propagation=""
+        for(j=7;j<separator;j++) {
+            if($j ~ /^(shared|master|propagate_from):/) {
+                private=0
+                propagation=propagation (propagation ? "," : "") $j
+            }
+        }
+        if(propagation=="") propagation="private"
+        records=records sprintf("[BR-INJECT][MOUNT] id=%s parent_id=%s target=%s type=%s source=%s propagation=%s\n",
+                                $1,$2,$5,$(separator+1),$(separator+2),propagation)
     }
-    END { if(!valid || count>1) exit 1; print id,children }
+    END {
+        if(!valid || count>1 || bad) exit 1
+        if(id!="-") for(mount_id in selected) {
+            node=mount_id
+            steps=0
+            while(node!=id) {
+                if(!(node in parents) || ++steps>rows) {
+                    print "[BR-INJECT][MOUNT][ERR] invalid ancestry for mount " mount_id > "/dev/stderr"
+                    exit 1
+                }
+                node=parents[node]
+            }
+        }
+        print id,children,private
+        printf "%s",records
+    }
     ' /proc/self/mountinfo) || return 1
-    read -r VIEW_ID VIEW_CHILDREN <<< "$report"
-    [[ $VIEW_ID == - || $VIEW_ID =~ ^[0-9]+$ ]] && [[ $VIEW_CHILDREN =~ ^[0-9]+$ ]]
+    read -r VIEW_ID VIEW_CHILDREN VIEW_PRIVATE <<< "$report"
+    if [[ $report == *$'\n'* ]]; then VIEW_MOUNTS=${report#*$'\n'}; fi
+    [[ $VIEW_ID == - || $VIEW_ID =~ ^[0-9]+$ ]] && [[ $VIEW_CHILDREN =~ ^[0-9]+$ ]] &&
+        [[ $VIEW_PRIVATE == 0 || $VIEW_PRIVATE == 1 ]]
 }
 
 VIEW_PATHS=("$DST_ROOT/dev" "$DST_ROOT/proc" "$DST_ROOT/sys")
@@ -192,14 +241,18 @@ release_views() {
         if [[ $VIEW_ID == - && $VIEW_CHILDREN == 0 ]]; then
             VIEW_ATTEMPTED[index]=0; continue
         fi
+        emit INFO "view cleanup snapshot: path=${VIEW_PATHS[index]}; recorded_id=${VIEW_IDS[index]}; actual_id=$VIEW_ID; children=$VIEW_CHILDREN; private=$VIEW_PRIVATE"
+        if [[ -n $VIEW_MOUNTS ]]; then printf '%s\n' "$VIEW_MOUNTS" >&2; fi
         if [[ -z ${VIEW_IDS[index]} || $VIEW_ID != "${VIEW_IDS[index]}" ]]; then
             warn "view ownership cannot be confirmed; retaining: ${VIEW_PATHS[index]}"; failed=1; continue
         fi
-        if [[ $VIEW_CHILDREN != 0 ]]; then
-            warn "unexpected child mounts; retaining view: ${VIEW_PATHS[index]}"; failed=1; continue
+        if [[ $VIEW_PRIVATE != 1 ]]; then
+            warn "view subtree is not private; retaining: ${VIEW_PATHS[index]}"; failed=1; continue
         fi
-        emit ACT "unmount owned view: ${VIEW_PATHS[index]}; mount_id=${VIEW_IDS[index]}"
-        if ! run umount -- "${VIEW_PATHS[index]}"; then
+        # The root ID is ours, all descendants belong to it, and the subtree is
+        # private. Package-created nested mounts can be released with this view.
+        emit ACT "recursively unmount owned view: ${VIEW_PATHS[index]}; mount_id=${VIEW_IDS[index]}; children=$VIEW_CHILDREN"
+        if ! run umount --recursive -- "${VIEW_PATHS[index]}"; then
             warn "cannot unmount owned view: ${VIEW_PATHS[index]}"; failed=1; continue
         fi
         if inspect_view "${VIEW_PATHS[index]}" && [[ $VIEW_ID == - && $VIEW_CHILDREN == 0 ]]; then
