@@ -11,7 +11,10 @@ mkdir -p -- "$state/work" "$state/output" "$state/logs"
 python3 "$script_dir/target.py" resolve "$target_id" --output "$state/target.json"
 recipe=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["recipe"])' "$state/target.json")
 artifact=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_name"])' "$state/target.json")
-[[ $(dpkg --print-architecture) == amd64 ]] || { printf 'Native amd64 builder required\n' >&2; exit 1; }
+architecture=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["architecture"])' "$state/target.json")
+[[ $(dpkg --print-architecture) == "$architecture" ]] || {
+    printf 'Native %s builder required\n' "$architecture" >&2; exit 1;
+}
 
 build_pid=
 stop() {

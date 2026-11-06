@@ -34,11 +34,12 @@ def resolve(target_id):
     recipe = (REPOSITORY / expected).resolve(strict=True)
     if not recipe.is_relative_to(REPOSITORY) or not recipe.is_file() or not os.access(recipe, os.X_OK):
         raise ValueError("recipe must be an executable inside the repository")
-    # Only this native backend is implemented. Reject unsupported targets instead
-    # of silently treating another architecture as an amd64 build.
-    if (target["architecture"], target["platform"], target["runner"], target["execution"]) != (
-        "amd64", "linux/amd64", "ubuntu-24.04", "native"
-    ):
+    # Match the whole native execution tuple; never fall back across architectures.
+    supported = {
+        ("amd64", "linux/amd64", "ubuntu-24.04", "native"),
+        ("arm64", "linux/arm64", "ubuntu-24.04-arm", "native"),
+    }
+    if (target["architecture"], target["platform"], target["runner"], target["execution"]) not in supported:
         raise ValueError("unsupported runner, architecture or execution backend")
     if not re.fullmatch(r"debian:trixie-slim@sha256:[0-9a-f]{64}", target["builder_image"]):
         raise ValueError("builder must be a digest-pinned Debian Trixie image")

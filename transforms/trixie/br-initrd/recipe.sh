@@ -665,6 +665,10 @@ trap - EXIT ERR HUP INT TERM
 VERIFY
 } | run chroot "$DST_ROOT" /bin/bash -s -- "${REBUILT_IMAGES[@]}"
 emit OK 'all initramfs rewritten in S4 passed read-back acceptance'
+# Package hooks maintain these copies. Verify the final pair/DTBs after every
+# package operation; this is selected by package presence, not CPU architecture.
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+run python3 "$script_dir/../../../scripts/raspi-firmware.py" "$DST_ROOT" --if-installed
 clean_tree "$DST_ROOT/tmp" contents
 clean_tree "$DST_ROOT/var/tmp" contents
 run install -D -o 0 -g 0 -m 0644 /dev/null "$DST_ROOT/etc/machine-id"

@@ -12,6 +12,7 @@ on:
           - amd64-trixie-memini
           - amd64-trixie-vm-incusd
           - amd64-trixie-vm-sandbox
+          - arm64-trixie-rpi-incusd
 
 permissions:
   contents: read

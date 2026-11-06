@@ -2,7 +2,8 @@
 
 入口是 **Actions → Transform rootfs → Run workflow**，处理本仓库成功基础构建的
 登记目标产物。新构建统一使用 `Build rootfs`（`.github/workflows/rootfs.yml`），
-支持 Debian Trixie / amd64 的 memini、vm-incusd、vm-sandbox。不会重新执行基础构建，
+支持 Debian Trixie / amd64 的 memini、vm-incusd、vm-sandbox，以及 arm64 的 rpi-incusd。
+不会重新执行基础构建，
 也不会复制 br-initrd 配方。
 
 来源校验同时核对基础入口、登记目标及构建记录。共用的 `rootfs-build.yml`、加工入口
@@ -69,7 +70,8 @@ artifact ID 精确锁定一次上传，不隐式寻找“最新”。过期后�
    再校验运行和产物元数据，确认同一仓库、
    成功完成的基础工作流、产物归属、名称、尝试号和未过期状态。
 2. 根据输入架构选择经过验证的原生 runner 和固定 digest 的 Debian builder。
-   当前只登记 amd64；未知架构明确失败，不回退到 amd64 或自动开启 QEMU。
+   登记 amd64/ubuntu-24.04 和 arm64/ubuntu-24.04-arm；未知架构明确失败，
+   不回退到 amd64 或自动开启 QEMU。用户不另选架构或 runner。
 3. 再次核对来源描述，下载指定 artifact。若 GitHub 提供 ZIP digest，则同时校验它。
    跨主机重定向不携带 GitHub token。下载的 ZIP 只允许五个预期的普通文件；
    不接受路径跳转、符号链接或额外条目。
@@ -85,6 +87,8 @@ artifact ID 精确锁定一次上传，不隐式寻找“最新”。过期后�
 加工业务保存在 [共享配方](../transforms/trixie/br-initrd/recipe.sh)，架构调度表位于
 `scripts/transform.py` 的 `BACKENDS`。增加架构需要验证对应执行后端和实际输入系统，
 无需复制 br-initrd，也不需要为每个架构增加独立加工工作流。
+输入安装了 raspi-firmware 时，还会在最终重建和包操作后验收 /boot/firmware 中的
+kernel/initrd 副本及配套 DTB；不会配置 NFS 服务端、实例命令行或启动发布。
 
 ## 输出和来源
 
@@ -100,7 +104,8 @@ rootfs-trixie-amd64-vm-incusd-br-initrd.SHA256SUMS
 
 memini、vm-sandbox 使用各自的基础名称；后者输出
 `rootfs-trixie-amd64-vm-sandbox-br-initrd.tar.xz` 及同名前缀的构建记录。
-主产物保留 14 天，诊断日志保留 7 天。
+arm64 rpi-incusd 的输出为 `rootfs-trixie-arm64-rpi-incusd-br-initrd.tar.xz`
+及同名前缀的构建记录。主产物保留 14 天，诊断日志保留 7 天。
 
 `.build.json` 的顶层代码提交和运行 URL 指本次加工；`base_build` 保留完整的基础构建
 记录；`input` 记录原始 run/attempt/artifact ID、归档名和 SHA-256；`transform` 记录

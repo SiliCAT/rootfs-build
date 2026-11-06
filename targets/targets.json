@@ -28,5 +28,15 @@
     "platform": "linux/amd64",
     "execution": "native",
     "builder_image": "debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"
+  },
+  "arm64-trixie-rpi-incusd": {
+    "architecture": "arm64",
+    "suite": "trixie",
+    "name": "rpi-incusd",
+    "recipe": "recipes/arm64/trixie/rpi-incusd/recipe.sh",
+    "runner": "ubuntu-24.04-arm",
+    "platform": "linux/arm64",
+    "execution": "native",
+    "builder_image": "debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"
   }
 }

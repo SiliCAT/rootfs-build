@@ -17,8 +17,10 @@ import zipfile
 import target
 
 # Execution support is explicit and separate from the shared business recipe.
-# Add a backend only after native builds have been validated on that architecture.
+# Native backends are explicit; each real job checks architecture and privileges.
 BACKENDS = {
+    "arm64": {"runner": "ubuntu-24.04-arm", "platform": "linux/arm64",
+              "builder_image": "debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"},
     "amd64": {"runner": "ubuntu-24.04", "platform": "linux/amd64",
               "builder_image": "debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"},
 }
@@ -32,6 +34,7 @@ CATALOG_LIMIT = 20
 BASE_WORKFLOW_TARGETS = {
     ".github/workflows/rootfs.yml": {
         "amd64-trixie-memini", "amd64-trixie-vm-incusd", "amd64-trixie-vm-sandbox",
+        "arm64-trixie-rpi-incusd",
     },
     ".github/workflows/rootfs-vm-sandbox.yml": {"amd64-trixie-vm-sandbox"},
 }
@@ -67,7 +70,7 @@ def positive_id(value):
 
 def backend(architecture):
     if architecture not in BACKENDS:
-        raise ValueError(f"no validated native transform backend for architecture: {architecture}")
+        raise ValueError(f"no registered native transform backend for architecture: {architecture}")
     return dict(BACKENDS[architecture])
 
 
