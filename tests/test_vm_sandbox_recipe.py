@@ -72,9 +72,9 @@ raise SystemExit(37)
     def test_package_business_contract(self):
         include = next(arg.split("=", 1)[1] for arg in self.args if arg.startswith("--include="))
         packages = re.split(r"[,\s]+", include)
-        self.assertEqual(len(packages), 42)
-        self.assertEqual(len(set(packages)), 42)
-        self.assertTrue({"ceph-common", "qemu-guest-agent", "open-vm-tools"} <= set(packages))
+        self.assertEqual(len(packages), 43)
+        self.assertEqual(len(set(packages)), 43)
+        self.assertTrue({"ceph-common", "qemu-guest-agent", "open-vm-tools", "thin-provisioning-tools"} <= set(packages))
         self.assertTrue({"systemd-container", "incus-base", "apparmor", "apparmor-utils", "ceph", "ceph-mon", "ceph-osd",
                          "nfs-kernel-server", "autofs", "mdadm",
                          "linux-headers-amd64", "dpkg-dev", "firmware-intel-graphics"}.isdisjoint(packages))

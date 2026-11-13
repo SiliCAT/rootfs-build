@@ -164,6 +164,7 @@ xfsprogs
 btrfs-progs
 bcache-tools
 lvm2
+thin-provisioning-tools
 nbd-client
 open-iscsi
 qemu-guest-agent

@@ -163,6 +163,7 @@ xfsprogs
 btrfs-progs
 bcache-tools
 lvm2
+thin-provisioning-tools
 nfs-common
 nbd-client
 open-iscsi

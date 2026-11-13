@@ -168,6 +168,7 @@ btrfs-progs
 bcache-tools
 mdadm
 lvm2
+thin-provisioning-tools
 nbd-client
 open-iscsi
 systemd-zram-generator

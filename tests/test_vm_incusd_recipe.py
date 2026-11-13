@@ -72,9 +72,9 @@ raise SystemExit(37)
     def test_package_business_contract(self):
         include = next(arg.split("=", 1)[1] for arg in self.args if arg.startswith("--include="))
         packages = re.split(r"[,\s]+", include)
-        self.assertEqual(len(packages), 44)
-        self.assertEqual(len(set(packages)), 44)
-        self.assertTrue({"incus-base", "apparmor", "apparmor-utils", "qemu-guest-agent", "open-vm-tools"} <= set(packages))
+        self.assertEqual(len(packages), 45)
+        self.assertEqual(len(set(packages)), 45)
+        self.assertTrue({"incus-base", "apparmor", "apparmor-utils", "qemu-guest-agent", "open-vm-tools", "thin-provisioning-tools"} <= set(packages))
         self.assertTrue({"systemd-container", "nfs-kernel-server", "autofs", "mdadm",
                          "linux-headers-amd64", "dpkg-dev", "firmware-intel-graphics"}.isdisjoint(packages))
         self.assertFalse(any(package.startswith("zfs") for package in packages))

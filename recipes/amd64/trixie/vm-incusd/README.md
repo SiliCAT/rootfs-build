@@ -22,7 +22,7 @@ sudo -n scripts/build-rootfs.sh \
 
 ## 包集和运行期策略
 
-44 个显式包按一包一行保留在 `recipe.sh`。
+45 个显式包按一包一行保留在 `recipe.sh`。
 包含 `incus-base`、`apparmor`、`apparmor-utils`、`qemu-guest-agent`、`open-vm-tools`。
 不安装 `systemd-container`。没有加入 ZFS、内核 headers 或 DKMS 构建业务。
 

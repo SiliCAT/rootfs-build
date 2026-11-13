@@ -48,7 +48,7 @@ raise SystemExit(37)
         packages = next(arg.split('=', 1)[1] for arg in args if arg.startswith('--include=')).split()
         expected = '''init systemd systemd-sysv dbus netbase iproute2 curl sudo tzdata locales
         dialog apt-utils ca-certificates autofs nfs-common ifupdown systemd-timesyncd zstd xz-utils
-        lz4 bzip2 gzip iputils-ping procps ethtool xfsprogs btrfs-progs bcache-tools mdadm lvm2
+        lz4 bzip2 gzip iputils-ping procps ethtool xfsprogs btrfs-progs bcache-tools mdadm lvm2 thin-provisioning-tools
         nbd-client open-iscsi systemd-zram-generator busybox-static rsync openssh-server incus-base
         apparmor apparmor-utils linux-image-arm64 linux-headers-arm64 firmware-misc-nonfree dpkg-dev
         zfsutils-linux/trixie-backports zfs-dkms/trixie-backports'''.split()

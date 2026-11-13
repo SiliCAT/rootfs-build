@@ -29,7 +29,7 @@ sudo -n scripts/build-rootfs.sh \
 
 ## 包集和系统策略
 
-42 个显式包按一包一行维护。相对 vm-incusd，去掉 `incus-base`、`apparmor`、
+43 个显式包按一包一行维护。相对 vm-incusd，去掉 `incus-base`、`apparmor`、
 `apparmor-utils`，增加 `ceph-common`。保留 qemu-guest-agent、open-vm-tools，以及其余
 原有包；Ceph 的 Python、librados、librbd 等依赖交给 APT 解析。
 不增加 Ceph 服务端包、ZFS、内核 headers 或 DKMS 构建业务。
