@@ -19,14 +19,14 @@ done
 # These are dpkg format fields, not shell variables.
 # shellcheck disable=SC2016
 packages=$(chroot "$root" dpkg-query --show '--showformat=${binary:Package} ${db:Status-Status}\n')
-for package in dracut ceph-common qemu-guest-agent open-vm-tools linux-image-amd64; do
+for package in dracut dracut-network nfs-common iproute2 ceph-common qemu-guest-agent open-vm-tools linux-image-amd64; do
     awk -v wanted="$package" '
         { split($1, name, ":") }
         name[1]==wanted && $2=="installed" { found=1 }
         END { exit !found }
     ' <<< "$packages" || fail "required package is not installed: $package"
 done
-for package in systemd-container incus-base apparmor apparmor-utils; do
+for package in systemd-container incus-base apparmor apparmor-utils ifupdown; do
     if awk -v wanted="$package" '
         { split($1, name, ":") }
         name[1]==wanted && $2=="installed" { found=1 }
@@ -96,13 +96,8 @@ shopt -s nullglob
 host_keys=("$root"/etc/ssh/ssh_host_*)
 (( ${#host_keys[@]} == 0 )) || fail 'SSH host keys remain'
 
-kernel_count=0
-for modules in "$root"/lib/modules/*; do
-    [[ -d $modules ]] || continue
-    version=${modules##*/}
-    [[ -s $root/boot/vmlinuz-$version && -s $root/boot/initrd.img-$version ]] ||
-        fail "missing kernel or initramfs: $version"
-    kernel_count=$((kernel_count + 1))
-done
-(( kernel_count > 0 )) || fail 'no target kernels found'
+chroot "$root" systemctl --root=/ is-enabled systemd-networkd.service | grep -Fx enabled
+[[ $(readlink -- "$root/etc/systemd/system/systemd-network-generator.service") == /dev/null ]] ||
+    fail 'the rootfs generator must leave the initramfs network configuration in /run intact'
+"$(dirname -- "${BASH_SOURCE[0]}")/verify-initramfs.sh" "$root"
 printf '[VM-DRACUT VERIFY] Ceph client, package, locale, policy, cleanup and kernel checks passed\n'

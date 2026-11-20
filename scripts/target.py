@@ -56,10 +56,31 @@ def sha256(path):
 
 
 def export_metadata(target_id, root, output):
-    return export_rootfs_metadata(resolve(target_id), root, output)
+    target = resolve(target_id)
+    if target_id != "amd64-trixie-vm-dracut":
+        return export_rootfs_metadata(target, root, output)
+
+    root = root.resolve(strict=True)
+    output = output.resolve(strict=True)
+    verifier = REPOSITORY / target["recipe"]
+    result = subprocess.run([str(verifier.with_name("verify-initramfs.sh")), str(root)],
+                            check=True, stdout=subprocess.PIPE)
+    report = output / f"{target['artifact_name']}.initramfs.txt"
+    report.write_bytes(result.stdout)
+    boot_files = [report]
+    for modules in sorted((root / "lib/modules").iterdir()):
+        if modules.is_dir():
+            for prefix in ("vmlinuz", "initrd.img"):
+                name = f"{prefix}-{modules.name}"
+                destination = output / name
+                shutil.copyfile(root / "boot" / name, destination)
+                boot_files.append(destination)
+    return export_rootfs_metadata(target, root, output,
+                                  extra={"boot_files": [p.name for p in boot_files]},
+                                  additional_files=boot_files)
 
 
-def export_rootfs_metadata(target, root, output, extra=None):
+def export_rootfs_metadata(target, root, output, extra=None, additional_files=()):
     """Export a checked rootfs; callers supply its identity and optional provenance."""
     root = root.resolve(strict=True)
     output = output.resolve(strict=True)
@@ -113,7 +134,7 @@ def export_rootfs_metadata(target, root, output, extra=None):
         metadata.update(extra)
     metadata_path = output / f"{stem}.build.json"
     metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
-    files = [archive, output / f"{archive.name}.sha256", package_path, metadata_path]
+    files = [archive, output / f"{archive.name}.sha256", package_path, metadata_path, *additional_files]
     sums = output / f"{stem}.SHA256SUMS"
     sums.write_text("".join(f"{sha256(path)}  {path.name}\n" for path in files))
     for path in [*files, sums]:

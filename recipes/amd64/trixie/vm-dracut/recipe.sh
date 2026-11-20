@@ -148,7 +148,6 @@ apt-utils
 ca-certificates
 openssh-server
 nfs-common
-ifupdown
 systemd-timesyncd
 zstd
 xz-utils
@@ -173,6 +172,7 @@ systemd-zram-generator
 busybox-static
 rsync
 dracut
+dracut-network
 linux-image-amd64
 firmware-realtek
 firmware-misc-nonfree
@@ -260,8 +260,20 @@ EOF
 options nbd nbds_max=1
 EOF
 
-    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/initramfs-tools/conf.d/resume" <<EOF
-RESUME=none
+    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/dracut.conf.d/90-universal-network.conf" <<EOF
+hostonly="no"
+hostonly_cmdline="no"
+add_dracutmodules+=" systemd-networkd network nfs kernel-network-modules "
+omit_dracutmodules+=" network-legacy network-manager connman "
+add_drivers+=" bridge bonding 8021q virtio_net virtio_pci "
+install_items+=" /etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf "
+show_modules="yes"
+EOF
+    # Keep generic ip=dhcp available while disabling implicit DHCP on devices
+    # that do not match any command-line generated configuration.
+    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf" <<EOF
+[Link]
+Unmanaged=yes
 EOF
 
     install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/zram-generator.conf.d/10-zram.conf" <<EOF
@@ -390,6 +402,11 @@ xargs -r dpkg -P < "${rc_list}.names"
 rm -f -- "${rc_list}" "${rc_list}.names"
 apt-get clean
 
+# /run/systemd/network is carried across switch_root. Keep the generated
+# configuration (including the DHCP client ID set by dracut) and let networkd renew it.
+systemctl --root=/ enable systemd-networkd.service
+systemctl --root=/ mask systemd-network-generator.service
+
 # [KERNEL] Validate the final installed kernels, not the runner kernel.
 [ "$(dpkg --print-architecture)" = amd64 ]
 kernel_count=0
@@ -399,6 +416,7 @@ for modules_dir in /lib/modules/*; do
     kernel_status=$(dpkg-query -W -f="\${db:Status-Status}" "linux-image-${kernel_version}")
     [ "${kernel_status}" = installed ]
     [ -s "/boot/vmlinuz-${kernel_version}" ]
+    dracut --force --kver "${kernel_version}" "/boot/initrd.img-${kernel_version}"
     [ -s "/boot/initrd.img-${kernel_version}" ]
     kernel_count=$((kernel_count + 1))
 done

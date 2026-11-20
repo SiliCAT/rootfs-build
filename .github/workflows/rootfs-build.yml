@@ -100,6 +100,9 @@ jobs:
             ${{ env.STATE_DIRECTORY }}/output/*.packages.tsv
             ${{ env.STATE_DIRECTORY }}/output/*.build.json
             ${{ env.STATE_DIRECTORY }}/output/*.SHA256SUMS
+            ${{ env.STATE_DIRECTORY }}/output/*.initramfs.txt
+            ${{ env.STATE_DIRECTORY }}/output/vmlinuz-*
+            ${{ env.STATE_DIRECTORY }}/output/initrd.img-*
       - name: Publish rootfs summary and artifact reference
         if: ${{ !cancelled() && steps.rootfs_artifact.outcome == 'success' }}
         env:
