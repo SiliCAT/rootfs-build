@@ -169,6 +169,7 @@ bcache-tools
 mdadm
 lvm2
 thin-provisioning-tools
+ceph-common
 nbd-client
 open-iscsi
 systemd-zram-generator
