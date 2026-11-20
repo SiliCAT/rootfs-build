@@ -48,6 +48,9 @@ for modules_dir in "$root"/lib/modules/*; do
     if grep -Fxq 'etc/systemd/system/systemd-network-generator.service' <<< "$paths"; then
         fail "$version: rootfs generator mask leaked into the initramfs"
     fi
+    if grep -Fxq 'etc/systemd/system/systemd-networkd.service.d/90-vm-dracut-handoff.conf' <<< "$paths"; then
+        fail "$version: real-root network handoff configuration leaked into the initramfs"
+    fi
     # dracut supplies a generic fallback, and may supply unrelated options
     # such as rd.btrfs=0. Check command-line content for boot network settings.
     unexpected=$(grep -E '^etc/systemd/network/.+\.(link|netdev|network)$' <<< "$paths" |

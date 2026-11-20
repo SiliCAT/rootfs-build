@@ -13,7 +13,7 @@ ifname=bootnet:52:54:00:12:34:56 bridge=br0:bootnet ip=br0:dhcp root=nfs4:192.0.
 
 多条 `ip=` 可以同时使用。把 IP 配在承载流量的桥、VLAN 或 Bond 上，成员口随拓扑配置。两条链路均可到达 NFS 服务器时，可使用 `rd.route=<服务器>/32:<下一跳>:<接口>` 约束流量，下一跳必须能从该接口到达。
 
-正式系统的 networkd 使用留在 `/run/systemd/network` 中的启动配置，保留启动网络并管理 DHCP 续租。发布产物中的静态检查报告列出实际收录的 dracut 模块、必需驱动和典型硬件的固件覆盖缺口。
+正式系统的 networkd 使用留在 `/run/systemd/network` 中的启动配置，保留启动网络并管理 DHCP 续租。接管时通过临时 netdev 配置保留现有虚拟接口的 MAC，避免切换机器 ID 时重新计算网桥 MAC。发布产物中的静态检查报告列出实际收录的 dracut 模块、必需驱动和典型硬件的固件覆盖缺口。
 
 ## 启动验收
 

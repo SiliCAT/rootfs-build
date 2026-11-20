@@ -276,6 +276,24 @@ EOF
 Unmanaged=yes
 EOF
 
+    # networkd can recalculate a bridge MAC using the real root machine ID.
+    # Preserve the live MAC while loading the generated topology again.
+    # The real-root service alone installs these runtime netdev drop-ins.
+    install -D -o 0 -g 0 -m 0755 /dev/stdin "$1/usr/libexec/vm-dracut-preserve-netdev-mac" <<'"'"'EOF'"'"'
+#!/bin/sh
+set -eu
+for definition in /run/systemd/network/70-*.netdev; do
+    [ -f "$definition" ] || continue
+    dropins="${definition}.d"
+    mkdir -p -- "$dropins"
+    printf "[NetDev]\nMACAddress=none\n" > "$dropins/95-vm-dracut-preserve-mac.conf"
+done
+EOF
+    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/system/systemd-networkd.service.d/90-vm-dracut-handoff.conf" <<EOF
+[Service]
+ExecStartPre=+/usr/libexec/vm-dracut-preserve-netdev-mac
+EOF
+
     install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/zram-generator.conf.d/10-zram.conf" <<EOF
 [zram0]
 zram-size = ram / 2
