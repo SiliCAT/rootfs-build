@@ -39,6 +39,7 @@ for modules_dir in "$root"/lib/modules/*; do
     for path in usr/lib/systemd/systemd-networkd usr/lib/systemd/systemd-network-generator \
         usr/lib/systemd/systemd-networkd-wait-online \
         etc/systemd/system/sysinit.target.wants/systemd-network-generator.service \
+        etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf \
         etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf; do
         grep -Fxq -- "$path" <<< "$paths" || fail "$version: missing $path"
     done

@@ -267,6 +267,7 @@ add_dracutmodules+=" systemd-networkd network nfs kernel-network-modules "
 omit_dracutmodules+=" network-legacy network-manager connman "
 add_drivers+=" bridge bonding 8021q virtio_net virtio_pci "
 install_items+=" /etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf "
+install_items+=" /etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf "
 show_modules="yes"
 EOF
     # Keep generic ip=dhcp available while disabling implicit DHCP on devices
@@ -274,6 +275,12 @@ EOF
     install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf" <<EOF
 [Link]
 Unmanaged=yes
+EOF
+    # An unnumbered uplink of a VLAN must not block an IPv4-ready VLAN.
+    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf" <<EOF
+[Service]
+ExecStart=
+ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --ipv4
 EOF
 
     # networkd can recalculate a bridge MAC using the real root machine ID.
