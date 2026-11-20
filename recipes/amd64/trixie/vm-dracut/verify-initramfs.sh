@@ -48,12 +48,17 @@ for modules_dir in "$root"/lib/modules/*; do
     if grep -Fxq 'etc/systemd/system/systemd-network-generator.service' <<< "$paths"; then
         fail "$version: rootfs generator mask leaked into the initramfs"
     fi
-    if grep -Eq '^(etc/cmdline\.d/.+|etc/systemd/network/.+\.(link|netdev|network))$' <<< "$paths"; then
-        # dracut supplies one generic DHCP fallback when no network is specified.
-        unexpected=$(grep -E '^(etc/cmdline\.d/.+|etc/systemd/network/.+\.(link|netdev|network))$' <<< "$paths" |
-            grep -Fxv 'etc/systemd/network/zzzz-dracut-default.network' || :)
-        [[ -z $unexpected ]] || fail "$version: unexpected embedded boot/network configuration: $unexpected"
-    fi
+    # dracut supplies a generic fallback, and may supply unrelated options
+    # such as rd.btrfs=0. Check command-line content for boot network settings.
+    unexpected=$(grep -E '^etc/systemd/network/.+\.(link|netdev|network)$' <<< "$paths" |
+        grep -Fxv 'etc/systemd/network/zzzz-dracut-default.network' || :)
+    [[ -z $unexpected ]] || fail "$version: unexpected embedded network configuration: $unexpected"
+    while IFS= read -r path; do
+        options=$(chroot "$root" lsinitrd -f "$path" "$initrd")
+        if grep -Eq '(^|[[:space:]])((root|netroot|nfsroot|ifname|ip|bootdev|bridge|bond|vlan|nameserver|rd\.route)=|rd\.neednet(=|[[:space:]]|$))' <<< "$options"; then
+            fail "$version: unexpected embedded boot arguments in $path"
+        fi
+    done < <(grep -E '^etc/cmdline(\.d/.+\.conf)?$' <<< "$paths")
 
     printf '\nDriver and firmware coverage\n'
     for driver in "${required_drivers[@]}" "${other_drivers[@]}"; do
