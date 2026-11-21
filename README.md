@@ -6,6 +6,7 @@
 - [GitHub Actions 构建](docs/github-actions.md)
 - [消费已有产物的 br-initrd 加工工作流](docs/rootfs-transform.md)
 - [memini：Debian Trixie / amd64 / ZFS 配方](recipes/amd64/trixie/memini/README.md)
+- [schroot-maintenance：Debian Trixie / amd64 / schroot 离线维护工具环境](recipes/amd64/trixie/schroot-maintenance/README.md)
 - [vm-incusd：Debian Trixie / amd64 / Incus 与来宾工具配方](recipes/amd64/trixie/vm-incusd/README.md)
 - [rpi-incusd：Debian Trixie / arm64 / 树莓派、ZFS 与 Incus 配方](recipes/arm64/trixie/rpi-incusd/README.md)
 - [vm-sandbox：Debian Trixie / amd64 / Ceph 客户端与来宾工具配方](recipes/amd64/trixie/vm-sandbox/README.md)
@@ -18,7 +19,7 @@ sudo -n scripts/build-rootfs.sh \
   --output outputs/rootfs-trixie-amd64-memini.tar.xz
 ```
 
-GitHub 上统一从 **Actions → Build rootfs → Run workflow** 手动选择 memini、vm-incusd、vm-sandbox 或 arm64 的 rpi-incusd。
+GitHub 上统一从 **Actions → Build rootfs → Run workflow** 手动选择 memini、schroot-maintenance、vm-incusd、vm-sandbox 或 arm64 的 rpi-incusd。
 工作流在 Debian 容器中准备工具，成功后上传压缩包、校验和、包版本及构建信息，
 并单独保存日志。入口需先提交到默认分支；外壳本身不自动安装依赖。
 

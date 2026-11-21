@@ -22,9 +22,12 @@ def resolve(target_id):
     target = dict(targets[target_id], id=target_id)
     fields = {"id", "architecture", "suite", "name", "recipe", "runner", "platform",
               "execution", "builder_image"}
-    if set(target) != fields or any(not isinstance(value, str) or "\n" in value or "\r" in value
-                                    for value in target.values()):
+    string_fields = target.keys() - {"requires_kernel"}
+    if string_fields != fields or any(not isinstance(target[key], str) or "\n" in target[key] or "\r" in target[key]
+                                      for key in string_fields):
         raise ValueError("target must contain exactly the supported single-line string fields")
+    if not isinstance(target.get("requires_kernel", True), bool):
+        raise ValueError("requires_kernel must be a boolean")
     for key in ("id", "architecture", "suite", "name"):
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", target[key]):
             raise ValueError(f"invalid target field: {key}")
@@ -104,8 +107,9 @@ def export_rootfs_metadata(target, root, output, extra=None, additional_files=()
     package_path = output / f"{stem}.packages.tsv"
     package_path.write_text("package\tversion\tarchitecture\n" +
                             "".join("\t".join(row) + "\n" for row in packages))
-    kernels = sorted(p.name for p in (root / "lib/modules").iterdir() if p.is_dir())
-    if not kernels:
+    modules = root / "lib/modules"
+    kernels = sorted(p.name for p in modules.iterdir() if p.is_dir()) if modules.is_dir() else []
+    if not kernels and target.get("requires_kernel", True):
         raise ValueError("no target kernels available for metadata")
     versions = {}
     for tool, arguments in {"mmdebstrap": ["--version"], "tar": ["--version"],
