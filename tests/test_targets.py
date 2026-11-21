@@ -123,6 +123,36 @@ class TargetTests(unittest.TestCase):
             digest, name = line.split("  ", 1)
             self.assertEqual(hashlib.sha256((output / name).read_bytes()).hexdigest(), digest)
 
+    def test_schroot_target_exports_metadata_without_kernel_modules(self):
+        target_id = "amd64-trixie-schroot-maintenance"
+        target = TARGET.resolve(target_id)
+        root = self.base / "rootfs"
+        database = root / "var/lib/dpkg"
+        database.mkdir(parents=True)
+        (database / "status").write_text(
+            "Package: incus-client\nStatus: install ok installed\nArchitecture: amd64\n"
+            "Version: 1\nDescription: fixture client package\n")
+        stem = target["artifact_name"]
+        archive = self.base / f"{stem}.tar.xz"
+        archive.write_bytes(b"fixture archive")
+        (self.base / f"{archive.name}.sha256").write_text("fixture checksum\n")
+
+        run = TARGET.subprocess.run
+
+        def run_tool(args, **kwargs):
+            if args[0] == "mmdebstrap":
+                return TARGET.subprocess.CompletedProcess(args, 0, stdout="mmdebstrap fixture\n")
+            return run(args, **kwargs)
+
+        with mock.patch.object(TARGET.subprocess, "run", side_effect=run_tool):
+            TARGET.export_metadata(target_id, root, self.base)
+            with self.assertRaisesRegex(ValueError, "no target kernels"):
+                TARGET.export_rootfs_metadata(dict(target, requires_kernel=True), root, self.base)
+
+        metadata = json.loads((self.base / f"{stem}.build.json").read_text())
+        self.assertEqual(metadata["target_kernels"], [])
+        self.assertEqual(metadata["installed_package_count"], 1)
+
     def test_diagnostics_copy_logs_without_following_rootfs_symlinks(self):
         state = self.base / "state"
         work = state / "work/rootfs-build.fixture"

@@ -2,7 +2,8 @@
 
 当前入口是 `.github/workflows/rootfs.yml`，在 Actions 页面显示为 **Build rootfs**。
 目前只有手动触发，在同一个 `target` 下拉列表中可选 `amd64-trixie-memini`、
-`amd64-trixie-vm-incusd`、`amd64-trixie-vm-sandbox` 和 `arm64-trixie-rpi-incusd`，每次构建一个目标。
+`amd64-trixie-schroot-maintenance`、`amd64-trixie-vm-incusd`、`amd64-trixie-vm-sandbox`
+和 `arm64-trixie-rpi-incusd`，每次构建一个目标。
 统一调用共用构建工作流，不自动推送 Release 或发布环境。
 
 ## 在 GitHub 上运行
@@ -28,6 +29,7 @@ artifact 上传身份；不将 GitHub token 传入构建容器。
 | `scripts/artifact-reference.py` | 主产物上传后生成运行摘要和诊断包中的 JSON 回执 |
 | `.github/workflows/rootfs-inputs.yml` | 查询可供加工的基础产物，在 Summary 展示候选清单 |
 | `recipes/amd64/trixie/memini/recipe.sh` | 独立的设备配方，继续拥有包集、配置和收尾 |
+| `recipes/amd64/trixie/schroot-maintenance/recipe.sh` | schroot 离线维护工具环境 |
 | `recipes/amd64/trixie/vm-incusd/recipe.sh` | 独立的 Incus/来宾配方，包含仅构建期间生效的裁剪 |
 | `recipes/amd64/trixie/vm-sandbox/recipe.sh` | 独立的 Ceph 客户端/来宾配方，保留 Ceph Debian 默认策略 |
 | `recipes/arm64/trixie/rpi-incusd/recipe.sh` | 独立的树莓派/ZFS/Incus 配方，不包含实例 ARC 与 subordinate ID 策略 |
@@ -79,8 +81,9 @@ rootfs-trixie-amd64-memini.SHA256SUMS
 校验。构建记录的压缩工具版本记录为 `xz`。Actions artifact 的 ZIP 压缩仍关闭，
 避免对已经压缩的归档重复压缩。
 
-构建 vm-incusd 或 vm-sandbox 时，文件名中的 `memini` 对应替换为各自名称。配方的 `verify.sh` 会在
+构建 schroot-maintenance、vm-incusd 或 vm-sandbox 时，文件名中的 `memini` 对应替换为各自名称。配方的 `verify.sh` 会在
 归档前自动执行，不需要给共用工作流添加设备专用步骤。
+schroot-maintenance 的构建记录中 `target_kernels` 为空，因为该配方使用宿主内核。
 rpi-incusd 对应 `rootfs-trixie-arm64-rpi-incusd` 前缀，同样输出五个文件；
 不额外创建启动分区或磁盘镜像。
 
