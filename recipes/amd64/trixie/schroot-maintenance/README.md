@@ -28,6 +28,12 @@ scripts/run-target.sh amd64-trixie-schroot-maintenance /build
   成品的 `policy-rc.d` 返回 101，供遵循 Debian 服务启动策略的软件包使用。
 - 归档阶段会检查包状态、关键命令、服务策略和构建清理。
 
+## sudo
+
+沿用其他配方的账号和授权。预置 `silicat`（UID `1000033`），保留禁用密码且不创建
+家目录的设置。该账号加入 `sudo` 组，组成员可用 `sudo -n` 执行命令。root 密码锁定。
+用其他宿主账号进入 schroot 时，该账号仍需在目标环境中取得 sudo 授权。
+
 ## 使用范围
 
 可直接对普通镜像文件运行 `sfdisk --dump`、`blkid -p`、`debugfs`、

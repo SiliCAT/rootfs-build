@@ -24,6 +24,17 @@ for package in incus incus-base xorriso; do
     fi
 done
 
+visudo -cf /etc/sudoers
+[ "$(id -u silicat)" = 1000033 ] || fail 'unexpected silicat UID'
+[ "$(stat -c '%u:%g:%a' /etc/sudoers.d/00-sudo-nopasswd)" = 0:0:440 ] ||
+    fail 'unexpected sudoers ownership or permissions'
+[ "$(runuser -u silicat -- sudo -n id -u)" = 0 ] || fail 'silicat cannot use passwordless sudo'
+root_status=$(passwd -S root)
+read -r _ password_state _ <<EOF_STATUS
+$root_status
+EOF_STATUS
+[ "$password_state" = L ] || fail 'root password must be locked'
+
 policy_status=0
 /usr/sbin/policy-rc.d || policy_status=$?
 [ "$policy_status" -eq 101 ] || fail 'policy-rc.d must exit 101'
