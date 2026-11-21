@@ -71,6 +71,7 @@ trap 'exit 143' TERM
 
 # APT, archives, networking, partitioning, filesystem tools, storage and diagnostics.
 PACKAGES='apt
+sudo
 debian-archive-keyring
 ca-certificates
 bzip2
@@ -150,6 +151,10 @@ mmdebstrap \
 #!/bin/sh
 exit 101
 EOF_POLICY
+
+    install -D -o 0 -g 0 -m 0440 /dev/stdin "$1/etc/sudoers.d/00-sudo-nopasswd" <<EOF
+%sudo ALL=(ALL:ALL) NOPASSWD:ALL
+EOF
     ' \
     --customize-hook='
         set -eu
@@ -157,6 +162,9 @@ EOF_POLICY
 # A UTC fallback works even if no timezone data package is present.
 printf "%s\n" UTC > /etc/timezone
 printf "%s\n" LANG=C.UTF-8 > /etc/default/locale
+
+passwd -dl root
+visudo -cf /etc/sudoers
 
 # Verify the shipped sources using the target CA and archive keyrings.
 apt-get --error-on=any update

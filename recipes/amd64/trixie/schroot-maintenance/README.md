@@ -28,6 +28,11 @@ scripts/run-target.sh amd64-trixie-schroot-maintenance /build
   成品的 `policy-rc.d` 返回 101，供遵循 Debian 服务启动策略的软件包使用。
 - 归档阶段会检查包状态、关键命令、服务策略和构建清理。
 
+## sudo
+
+用户由宿主提供 `/etc/passwd`。schroot 内识别为 `sudo` 组成员的用户可以免密
+执行 `sudo`。组成员资格由 schroot 可见的组信息决定。镜像中的 root 密码锁定。
+
 ## 使用范围
 
 可直接对普通镜像文件运行 `sfdisk --dump`、`blkid -p`、`debugfs`、
