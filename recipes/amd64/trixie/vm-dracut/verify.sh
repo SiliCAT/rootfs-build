@@ -19,14 +19,14 @@ done
 # These are dpkg format fields, not shell variables.
 # shellcheck disable=SC2016
 packages=$(chroot "$root" dpkg-query --show '--showformat=${binary:Package} ${db:Status-Status}\n')
-for package in dracut dracut-network nfs-common iproute2 ceph-common qemu-guest-agent open-vm-tools linux-image-amd64; do
+for package in dracut dracut-network nfs-common iproute2 ifupdown ceph-common qemu-guest-agent open-vm-tools linux-image-amd64; do
     awk -v wanted="$package" '
         { split($1, name, ":") }
         name[1]==wanted && $2=="installed" { found=1 }
         END { exit !found }
     ' <<< "$packages" || fail "required package is not installed: $package"
 done
-for package in systemd-container incus-base apparmor apparmor-utils ifupdown; do
+for package in systemd-container incus-base apparmor apparmor-utils; do
     if awk -v wanted="$package" '
         { split($1, name, ":") }
         name[1]==wanted && $2=="installed" { found=1 }
@@ -96,8 +96,11 @@ shopt -s nullglob
 host_keys=("$root"/etc/ssh/ssh_host_*)
 (( ${#host_keys[@]} == 0 )) || fail 'SSH host keys remain'
 
-chroot "$root" systemctl --root=/ is-enabled systemd-networkd.service | grep -Fx enabled
-[[ $(readlink -- "$root/etc/systemd/system/systemd-network-generator.service") == /dev/null ]] ||
-    fail 'the rootfs generator must leave the initramfs network configuration in /run intact'
+for path in usr/libexec/vm-dracut-preserve-netdev-mac \
+    etc/systemd/system/systemd-networkd.service.d/90-vm-dracut-handoff.conf \
+    etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf \
+    etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf; do
+    [[ ! -e $root/$path && ! -L $root/$path ]] || fail "unexpected real-root network override: $path"
+done
 "$(dirname -- "${BASH_SOURCE[0]}")/verify-initramfs.sh" "$root"
 printf '[VM-DRACUT VERIFY] Ceph client, package, locale, policy, cleanup and kernel checks passed\n'

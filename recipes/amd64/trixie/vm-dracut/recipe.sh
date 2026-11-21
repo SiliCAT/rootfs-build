@@ -148,6 +148,7 @@ apt-utils
 ca-certificates
 openssh-server
 nfs-common
+ifupdown
 systemd-timesyncd
 zstd
 xz-utils
@@ -266,39 +267,23 @@ hostonly_cmdline="no"
 add_dracutmodules+=" systemd-networkd network nfs kernel-network-modules "
 omit_dracutmodules+=" network-legacy network-manager connman "
 add_drivers+=" bridge bonding 8021q virtio_net virtio_pci "
-install_items+=" /etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf "
-install_items+=" /etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf "
+include_src+=(/etc/dracut.conf.d/vm-dracut/10-explicit-ip.conf)
+include_target+=(/etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf)
+include_src+=(/etc/dracut.conf.d/vm-dracut/90-vm-dracut-ipv4.conf)
+include_target+=(/etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf)
 show_modules="yes"
 EOF
     # Keep generic ip=dhcp available while disabling implicit DHCP on devices
     # that do not match any command-line generated configuration.
-    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/network/zzzz-dracut-default.network.d/10-explicit-ip.conf" <<EOF
+    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/dracut.conf.d/vm-dracut/10-explicit-ip.conf" <<EOF
 [Link]
 Unmanaged=yes
 EOF
     # An unnumbered uplink of a VLAN must not block an IPv4-ready VLAN.
-    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/system/systemd-networkd-wait-online.service.d/90-vm-dracut-ipv4.conf" <<EOF
+    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/dracut.conf.d/vm-dracut/90-vm-dracut-ipv4.conf" <<EOF
 [Service]
 ExecStart=
 ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --ipv4
-EOF
-
-    # networkd can recalculate a bridge MAC using the real root machine ID.
-    # Preserve the live MAC while loading the generated topology again.
-    # The real-root service alone installs these runtime netdev drop-ins.
-    install -D -o 0 -g 0 -m 0755 /dev/stdin "$1/usr/libexec/vm-dracut-preserve-netdev-mac" <<'"'"'EOF'"'"'
-#!/bin/sh
-set -eu
-for definition in /run/systemd/network/70-*.netdev; do
-    [ -f "$definition" ] || continue
-    dropins="${definition}.d"
-    mkdir -p -- "$dropins"
-    printf "[NetDev]\nMACAddress=none\n" > "$dropins/95-vm-dracut-preserve-mac.conf"
-done
-EOF
-    install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/system/systemd-networkd.service.d/90-vm-dracut-handoff.conf" <<EOF
-[Service]
-ExecStartPre=+/usr/libexec/vm-dracut-preserve-netdev-mac
 EOF
 
     install -D -o 0 -g 0 -m 0644 /dev/stdin "$1/etc/systemd/zram-generator.conf.d/10-zram.conf" <<EOF
@@ -426,11 +411,6 @@ awk "/^rc/ {print \$2}" "${rc_list}" > "${rc_list}.names"
 xargs -r dpkg -P < "${rc_list}.names"
 rm -f -- "${rc_list}" "${rc_list}.names"
 apt-get clean
-
-# /run/systemd/network is carried across switch_root. Keep the generated
-# configuration (including the DHCP client ID set by dracut) and let networkd renew it.
-systemctl --root=/ enable systemd-networkd.service
-systemctl --root=/ mask systemd-network-generator.service
 
 # [KERNEL] Validate the final installed kernels, not the runner kernel.
 [ "$(dpkg --print-architecture)" = amd64 ]
