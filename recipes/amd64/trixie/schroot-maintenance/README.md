@@ -30,9 +30,8 @@ scripts/run-target.sh amd64-trixie-schroot-maintenance /build
 
 ## sudo
 
-沿用其他配方的账号和授权。预置 `silicat`（UID `1000033`），保留禁用密码且不创建
-家目录的设置。该账号加入 `sudo` 组，组成员可用 `sudo -n` 执行命令。root 密码锁定。
-用其他宿主账号进入 schroot 时，该账号仍需在目标环境中取得 sudo 授权。
+用户由宿主提供 `/etc/passwd`。schroot 内识别为 `sudo` 组成员的用户可以免密
+执行 `sudo`。组成员资格由 schroot 可见的组信息决定。镜像中的 root 密码锁定。
 
 ## 使用范围
 

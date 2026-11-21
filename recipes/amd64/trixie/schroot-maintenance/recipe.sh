@@ -163,19 +163,6 @@ EOF
 printf "%s\n" UTC > /etc/timezone
 printf "%s\n" LANG=C.UTF-8 > /etc/default/locale
 
-if ! id -u silicat >/dev/null 2>&1; then
-    adduser --uid 1000033 --disabled-password --no-create-home --gecos "" silicat
-fi
-
-# Check command results separately: POSIX sh has no portable pipefail.
-user_groups=$(id -nG silicat)
-case " ${user_groups} " in
-    *" sudo "*) : ;;
-    *) usermod -a -G sudo silicat ;;
-esac
-
-# Keep the uploaded recipe policy: always delete and lock the root password.
-# Failure is fatal, just like every other required operation.
 passwd -dl root
 visudo -cf /etc/sudoers
 

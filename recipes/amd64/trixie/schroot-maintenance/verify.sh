@@ -25,10 +25,10 @@ for package in incus incus-base xorriso; do
 done
 
 visudo -cf /etc/sudoers
-[ "$(id -u silicat)" = 1000033 ] || fail 'unexpected silicat UID'
 [ "$(stat -c '%u:%g:%a' /etc/sudoers.d/00-sudo-nopasswd)" = 0:0:440 ] ||
     fail 'unexpected sudoers ownership or permissions'
-[ "$(runuser -u silicat -- sudo -n id -u)" = 0 ] || fail 'silicat cannot use passwordless sudo'
+grep -Fxq '%sudo ALL=(ALL:ALL) NOPASSWD:ALL' /etc/sudoers.d/00-sudo-nopasswd ||
+    fail 'passwordless sudo rule for the sudo group is missing'
 root_status=$(passwd -S root)
 read -r _ password_state _ <<EOF_STATUS
 $root_status
