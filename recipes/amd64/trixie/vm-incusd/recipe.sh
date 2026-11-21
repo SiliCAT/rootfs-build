@@ -188,7 +188,8 @@ APT::Install-Recommends "0";
 APT::Install-Suggests "0";'
 VM_INCUSD_BUILD_DPKG_CONFIG='path-exclude=/usr/share/doc/*
 path-exclude=/usr/share/man/*
-path-exclude=/usr/share/locale/*'
+path-exclude=/usr/share/locale/*
+path-include=/usr/share/locale/locale.alias'
 # Export the text verbatim for the hook heredocs.
 # shellcheck disable=SC2090
 export VM_INCUSD_BUILD_APT_CONFIG VM_INCUSD_BUILD_DPKG_CONFIG
@@ -287,10 +288,13 @@ EOF
     set -eux
     chroot "$1" sh -euxs <<'"'"'EOF'"'"'
 export DEBIAN_FRONTEND=noninteractive
-sed -i "s/^[# ]*en_US\.UTF-8 UTF-8/en_US.UTF-8 UTF-8/" /etc/locale.gen
+# [LOCALE] Generate and configure the target locale.
+sed -i "s/^[# ]*en_US\.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/" /etc/locale.gen
 dpkg-reconfigure --frontend=noninteractive locales
-update-locale LANG=en_US.UTF-8
-ln -fs /usr/share/zoneinfo/US/Eastern /etc/localtime
+update-locale --reset LANG=en_US.UTF-8
+
+# [TIMEZONE] Use the canonical timezone identifier.
+ln -sfn /usr/share/zoneinfo/America/New_York /etc/localtime
 dpkg-reconfigure -f noninteractive tzdata
 EOF
   ' \

@@ -31,8 +31,7 @@ sudo -n scripts/build-rootfs.sh \
 - 保留 `silicat` 用户、UID `1000033`、禁用密码、不创建 home、sudo 组和 NOPASSWD 规则。
 - root 密码无条件清空并锁定，失败中止构建。
 - SSH 禁止 root、密码及键盘交互登录，清除构建期 host keys。
-- 生成 `en_US.UTF-8`，使用 `update-locale LANG=en_US.UTF-8` 设置默认语言。
-- 时区通过 `US/Eastern` 和发行版 reconfigure 流程设置；tzdata 可规范化别名。
+- 生成 `en_US.UTF-8`，默认 LANG 为 `en_US.UTF-8`，规范时区为 `America/New_York`。
 - 保留 NBD、overlay、USB/IP、`nbds_max=1`、`RESUME=none`、zram 及 volatile journald 配置。
 - 屏蔽 rsyslog、两个来宾服务，以及五个 Incus service/socket 单元；安装软件包不意味着
   模板会自动启动这些服务。
@@ -53,14 +52,23 @@ Suggests。DPKG 通过原生 `--dpkgopt` 写入 `/etc/dpkg/dpkg.cfg.d/99mmdebstr
 ```
 
 使用原生选项可覆盖 mmdebstrap 的最早解包阶段；builder 已包含 `mmtarfilter` 和 Python。
-没有 copyright、locale.alias 例外，也不增加其他目录排除。
-locale 生成可能提示 locale.alias 缺失；验收仍须确认 `en_US.UTF-8` 实际生成且默认 LANG 正确。
+仅精确保留 `/usr/share/locale/locale.alias`（排除规则之后的 path-include）；
+没有 copyright 例外，也不增加其他目录排除。
 APT/DPKG 规则值只定义一次，由配方内部导出给 hooks，不是调用者的业务输入。
 
 规则持续覆盖安装、reconfigure、CA/APT 刷新、autoremove 和 rc 包清除。最后一个
 customize hook 比对文件内容，再精确移除这两个本次生成的配置。
 发现配置被替换或写入了其他规则时直接失败，不删除不明配置，也不改写发行版默认值。
 删除规则不会补回已经省略的文件；以后安装、升级遵循系统正常策略。
+
+## 区域环境
+
+统一 Debian Trixie 区域环境：显式安装 `tzdata`、`locales`，生成 `en_US.UTF-8`，
+通过 `update-locale --reset LANG=en_US.UTF-8` 设置 `/etc/locale.conf`，并保留 `C.UTF-8`。
+`/etc/localtime` 指向规范时区 `America/New_York`，由 `dpkg-reconfigure tzdata`
+完成配置；不主动创建 `/etc/timezone` 或读写旧式 `/etc/default/locale`。
+不设置全局 `LC_ALL`。构建验收检查软件包、locale 生成和字符集、默认配置、
+`locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
 
 ## 收尾和验收
 

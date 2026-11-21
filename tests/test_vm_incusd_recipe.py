@@ -98,6 +98,7 @@ raise SystemExit(37)
         self.assertEqual(options[0].splitlines(), [
             "path-exclude=/usr/share/doc/*", "path-exclude=/usr/share/man/*",
             "path-exclude=/usr/share/locale/*",
+            "path-include=/usr/share/locale/locale.alias",
         ])
         self.assertFalse(any(arg.startswith("--aptopt=") for arg in self.args))
 

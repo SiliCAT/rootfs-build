@@ -279,9 +279,13 @@ EOF
     set -eux
     chroot "$1" sh -euxs <<'"'"'EOF'"'"'
 export DEBIAN_FRONTEND=noninteractive
-sed -i "s/^[# ]*en_US\.UTF-8 UTF-8/en_US.UTF-8 UTF-8/" /etc/locale.gen
+# [LOCALE] Generate and configure the target locale.
+sed -i "s/^[# ]*en_US\.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/" /etc/locale.gen
 dpkg-reconfigure --frontend=noninteractive locales
-ln -fs /usr/share/zoneinfo/US/Eastern /etc/localtime
+update-locale --reset LANG=en_US.UTF-8
+
+# [TIMEZONE] Use the canonical timezone identifier.
+ln -sfn /usr/share/zoneinfo/America/New_York /etc/localtime
 dpkg-reconfigure -f noninteractive tzdata
 EOF
   ' \

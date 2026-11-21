@@ -26,14 +26,23 @@ artifact ID 后，自动选择 ARM runner 和公共 br-initrd 配方，输出
 - 保留原 main/backports 源范围和组件、backports deb-src 及 ZFS pin；源地址统一为
   HTTPS。没有借迁移额外加入 updates/security 套件或临时文件裁剪业务。
 - 保留 `silicat` UID 1000033、sudo、SSH、root 锁定、en_US.UTF-8 locale 生成、
-  US/Eastern 时区、NBD/overlay/USBIP、无 resume、ZRAM、易失日志策略。
-  不额外修改默认 LANG。
+  America/New_York 时区、NBD/overlay/USBIP、无 resume、ZRAM、易失日志策略。
+  默认 LANG 统一为 `en_US.UTF-8`。
 - 明确保留五个 Incus 服务/socket mask，以及原有 rsyslog、qemu-guest-agent、
   open-vm-tools mask；不初始化 Incus 存储池、网络或运行状态。
 - 不写入 root subordinate ID 范围，不写入 `90-zfs-arc-rpi4-4g.conf`；它们属于
   实例初始化。`incus-base` 的安装脚本会自动分配 root 范围，因此 mmdebstrap 返回后
   还会移除 subuid/subgid 及其 `-` 备份中的 root 条目；保留其他用户、注释及文件权限，
   不作整文件清空。最终验收同时检查活动文件和备份。
+
+## 区域环境
+
+统一 Debian Trixie 区域环境：显式安装 `tzdata`、`locales`，生成 `en_US.UTF-8`，
+通过 `update-locale --reset LANG=en_US.UTF-8` 设置 `/etc/locale.conf`，并保留 `C.UTF-8`。
+`/etc/localtime` 指向规范时区 `America/New_York`，由 `dpkg-reconfigure tzdata`
+完成配置；不主动创建 `/etc/timezone` 或读写旧式 `/etc/default/locale`。
+不设置全局 `LC_ALL`。构建验收检查软件包、locale 生成和字符集、默认配置、
+`locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
 
 ## 内核、initrd、DTB 边界
 

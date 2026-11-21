@@ -15,6 +15,16 @@ ifname=bootnet:52:54:00:12:34:56 bridge=br0:bootnet ip=192.0.2.42::192.0.2.1:255
 
 正式系统的 networkd 相关服务保留 Debian 软件包安装后的状态。静态地址和路由随内核网络状态跨 `switch_root` 保留。正式系统配置其他接口时，应保持 NFS 出口及其路由。发布产物中的静态检查报告列出实际收录的 dracut 模块、必需驱动和典型硬件的固件覆盖缺口。
 
+## 区域环境
+
+统一 Debian Trixie 区域环境：显式安装 `tzdata`、`locales`，生成 `en_US.UTF-8`，
+通过 `update-locale --reset LANG=en_US.UTF-8` 设置 `/etc/locale.conf`，并保留 `C.UTF-8`。
+`/etc/localtime` 指向规范时区 `America/New_York`，由 `dpkg-reconfigure tzdata`
+完成配置；不主动创建 `/etc/timezone` 或读写旧式 `/etc/default/locale`。
+不设置全局 `LC_ALL`。构建验收检查软件包、locale 生成和字符集、默认配置、
+`locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
+构建期仍裁剪应用翻译，仅精确保留 `/usr/share/locale/locale.alias`。
+
 ## 启动验收
 
 对同一份内核与 initramfs 切换启动参数，记录以下结果。

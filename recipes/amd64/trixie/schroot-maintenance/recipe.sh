@@ -74,6 +74,8 @@ PACKAGES='apt
 sudo
 debian-archive-keyring
 ca-certificates
+tzdata
+locales
 bzip2
 xz-utils
 zstd
@@ -145,6 +147,7 @@ mmdebstrap \
     --dpkgopt='path-exclude=/usr/share/lintian/*' \
     --dpkgopt='path-exclude=/usr/share/linda/*' \
     --dpkgopt='path-exclude=/usr/share/locale/*' \
+    --dpkgopt='path-include=/usr/share/locale/locale.alias' \
     --setup-hook='
         set -eu
         install -D -o 0 -g 0 -m 0755 /dev/stdin "$1/usr/sbin/policy-rc.d" <<EOF_POLICY
@@ -159,9 +162,15 @@ EOF
     --customize-hook='
         set -eu
         chroot "$1" sh -es <<'"'"'EOF_CHROOT'"'"'
-# A UTC fallback works even if no timezone data package is present.
-printf "%s\n" UTC > /etc/timezone
-printf "%s\n" LANG=C.UTF-8 > /etc/default/locale
+export DEBIAN_FRONTEND=noninteractive
+# [LOCALE] Generate and configure the target locale.
+sed -i "s/^[# ]*en_US\.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/" /etc/locale.gen
+dpkg-reconfigure --frontend=noninteractive locales
+update-locale --reset LANG=en_US.UTF-8
+
+# [TIMEZONE] Use the canonical timezone identifier.
+ln -sfn /usr/share/zoneinfo/America/New_York /etc/localtime
+dpkg-reconfigure -f noninteractive tzdata
 
 passwd -dl root
 visudo -cf /etc/sudoers

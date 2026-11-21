@@ -44,7 +44,7 @@ sudo -n scripts/build-rootfs.sh \
   上游源或版本 pin。
 - 保留 `silicat` 用户、UID `1000033`、sudo 及 NOPASSWD；root 密码清空并锁定；SSH
   禁止 root、密码及键盘交互登录，并清除 host keys。
-- 保留 en_US.UTF-8 和默认 LANG、US/Eastern 时区语义、NBD/overlay/USB/IP、zram、
+- 保留 en_US.UTF-8 和默认 LANG、America/New_York 时区语义、NBD/overlay/USB/IP、zram、
   RESUME=none 及 volatile journald。
 
 ## 临时裁剪与收尾
@@ -54,12 +54,21 @@ mmdebstrap 使用 root 模式、directory 输出、minbase；按原生 builder �
 
 仅构建期间使用 `/etc/apt/apt.conf.d/90-vm-sandbox-build` 关闭语言索引、Recommends 和
 Suggests；通过原生 `--dpkgopt` 排除 `/usr/share/doc/*`、`/usr/share/man/*`、
-`/usr/share/locale/*`，覆盖最早解包阶段。末尾比对本次生成的 APT/DPKG 配置，再精确
+`/usr/share/locale/*`（精确保留 `/usr/share/locale/locale.alias`），覆盖最早解包阶段。末尾比对本次生成的 APT/DPKG 配置，再精确
 移除；不删除包自身的其他策略。后续安装及升级遵循 Debian 默认策略。
 
 继续严格执行 CA/APT 刷新、autoremove、残余配置清除、缓存和模板身份清理，以及
 mmdebstrap 返回后的 policy-rc.d 删除与最终收尾。清空日志而保留 Ceph 目录及权限，
 不删除 `/var/lib/ceph`。所有关键错误均传播，不创建 `/etc/build-meta`。
+
+## 区域环境
+
+统一 Debian Trixie 区域环境：显式安装 `tzdata`、`locales`，生成 `en_US.UTF-8`，
+通过 `update-locale --reset LANG=en_US.UTF-8` 设置 `/etc/locale.conf`，并保留 `C.UTF-8`。
+`/etc/localtime` 指向规范时区 `America/New_York`，由 `dpkg-reconfigure tzdata`
+完成配置；不主动创建 `/etc/timezone` 或读写旧式 `/etc/default/locale`。
+不设置全局 `LC_ALL`。构建验收检查软件包、locale 生成和字符集、默认配置、
+`locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
 
 ## 验收范围
 

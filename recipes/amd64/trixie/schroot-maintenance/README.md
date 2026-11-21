@@ -24,9 +24,20 @@ scripts/run-target.sh amd64-trixie-schroot-maintenance /build
 - APT 保留 Trixie、updates、security、backports 的二进制与源码源，均启用
   `main contrib non-free non-free-firmware`。成品清理索引和缓存，首次使用时运行
   `apt-get update`。关闭翻译索引，保留 Debian 的推荐包安装策略。
-- 构建期裁剪手册、文档和翻译，保留包的版权文件。预设 `C.UTF-8` 和 UTC。
+- 构建期裁剪手册、文档和翻译，保留包的版权文件及 `/usr/share/locale/locale.alias`。
   成品的 `policy-rc.d` 返回 101，供遵循 Debian 服务启动策略的软件包使用。
 - 归档阶段会检查包状态、关键命令、服务策略和构建清理。
+
+## 区域环境
+
+统一 Debian Trixie 区域环境：显式安装 `tzdata`、`locales`，生成 `en_US.UTF-8`，
+通过 `update-locale --reset LANG=en_US.UTF-8` 设置 `/etc/locale.conf`，并保留 `C.UTF-8`。
+`/etc/localtime` 指向规范时区 `America/New_York`，由 `dpkg-reconfigure tzdata`
+完成配置；不主动创建 `/etc/timezone` 或读写旧式 `/etc/default/locale`。
+不设置全局 `LC_ALL`。构建验收检查软件包、locale 生成和字符集、默认配置、
+`locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
+schroot 实例的会话环境初始化（例如 profile.d）由部署方负责，不进入母版；
+宿主不应通过 copyfiles 或 bind mount 覆盖母版的时区及 locale 数据。
 
 ## sudo
 

@@ -45,6 +45,16 @@ binfmt/QEMU 执行能力；本配方不安装或配置模拟器，也未验证�
 包集一包一行，APT 源和所有 hook 均保留在 `recipe.sh`，便于人工修改和审阅。
 这里的目标包安装与工作流准备阶段的构建工具安装是两个不同的职责。
 
+## 区域环境
+
+统一 Debian Trixie 区域环境：显式安装 `tzdata`、`locales`，生成 `en_US.UTF-8`，
+通过 `update-locale --reset LANG=en_US.UTF-8` 设置 `/etc/locale.conf`，并保留 `C.UTF-8`。
+`/etc/localtime` 指向规范时区 `America/New_York`，由 `dpkg-reconfigure tzdata`
+完成配置；不主动创建 `/etc/timezone` 或读写旧式 `/etc/default/locale`。
+不设置全局 `LC_ALL`。构建验收检查软件包、locale 生成和字符集、默认配置、
+`locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
+区域环境专项验收暂在配方收尾中执行，不新增独立 verify.sh。
+
 ## 检查的边界
 
 目标内核版本取自 rootfs 的模块目录并核对已安装的内核包，不使用 runner 的 `uname -r`，

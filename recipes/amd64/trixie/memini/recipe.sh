@@ -272,9 +272,13 @@ EOF
     set -eux
     chroot "$1" sh -euxs <<'"'"'EOF'"'"'
 export DEBIAN_FRONTEND=noninteractive
-sed -i "s/^[# ]*en_US\.UTF-8 UTF-8/en_US.UTF-8 UTF-8/" /etc/locale.gen
+# [LOCALE] Generate and configure the target locale.
+sed -i "s/^[# ]*en_US\.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/" /etc/locale.gen
 dpkg-reconfigure --frontend=noninteractive locales
-ln -fs /usr/share/zoneinfo/US/Eastern /etc/localtime
+update-locale --reset LANG=en_US.UTF-8
+
+# [TIMEZONE] Use the canonical timezone identifier.
+ln -sfn /usr/share/zoneinfo/America/New_York /etc/localtime
 dpkg-reconfigure -f noninteractive tzdata
 EOF
   ' \
@@ -500,6 +504,58 @@ clean_tree "${TARGET_ROOT}/var/lib/dhcp" contents
 clean_tree "${TARGET_ROOT}/var/log" logs
 rm -f -- "${TARGET_ROOT}/root/.bash_history"
 clean_tree "${TARGET_ROOT}/home" history
+
+# Regional settings are validated here until a separate memini verifier is introduced.
+chroot "${TARGET_ROOT}" /bin/sh -es <<'EOF_REGIONAL'
+fail() { printf '[MEMINI VERIFY][ERR] %s\n' "$1" >&2; exit 95; }
+# Check the target regional settings independently of the builder environment.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+for package in tzdata locales; do
+    status=$(dpkg-query -W -f='${db:Status-Status}' "$package") ||
+        fail "missing package: $package"
+    [ "$status" = installed ] || fail "missing package: $package"
+done
+
+grep -Fxq 'en_US.UTF-8 UTF-8' /etc/locale.gen ||
+    fail 'en_US.UTF-8 is not enabled in locale.gen'
+available_locales=$(LC_ALL=C locale -a)
+printf '%s\n' "$available_locales" | grep -Fxiq en_US.utf8 ||
+    fail 'en_US.UTF-8 was not generated'
+for target_locale in C.UTF-8 en_US.UTF-8; do
+    charmap=$(LC_ALL="$target_locale" locale charmap 2>&1) ||
+        fail "unavailable UTF-8 locale: $target_locale"
+    [ "$charmap" = UTF-8 ] || fail "unexpected charmap: $target_locale"
+done
+[ -r /usr/share/locale/locale.alias ] && [ -r /etc/locale.alias ] ||
+    fail 'locale.alias is missing or unreadable'
+
+unset LANG LANGUAGE LC_ALL
+[ -f /etc/locale.conf ] || fail 'missing /etc/locale.conf'
+# shellcheck disable=SC1091
+. /etc/locale.conf
+[ "${LANG:-}" = en_US.UTF-8 ] || fail 'unexpected default LANG'
+[ -z "${LC_ALL+x}" ] || fail 'LC_ALL must not be set globally'
+
+[ -L /etc/localtime ] || fail '/etc/localtime must be a symbolic link'
+zone=$(readlink -e /etc/localtime) || fail 'cannot resolve /etc/localtime'
+[ "$zone" = /usr/share/zoneinfo/America/New_York ] ||
+    fail 'unexpected timezone link target'
+unset TZ
+# Fixed winter and summer timestamps avoid a transition-time race.
+for epoch in 1767225600 1782864000; do
+    actual=$(LC_ALL=C date -d "@$epoch" '+%Z %z')
+    expected=$(LC_ALL=C TZ=America/New_York date -d "@$epoch" '+%Z %z')
+    [ "$actual" = "$expected" ] || fail 'unexpected effective timezone'
+done
+
+# Verify package-owned zoneinfo files, not deliberately filtered documentation
+# or message translations. Require the dpkg verification command to succeed.
+timezone_audit=$(dpkg -V tzdata) || fail 'cannot verify tzdata'
+zoneinfo_audit=$(printf '%s\n' "$timezone_audit" |
+    awk '/\/usr\/share\/zoneinfo\//')
+[ -z "$zoneinfo_audit" ] || fail "tzdata zoneinfo integrity check failed: $zoneinfo_audit"
+printf '[VERIFY] Regional settings checks passed\n'
+EOF_REGIONAL
 
 # The caller validates mount cleanup and archives only after successful return.
 # No runner module loading, image operations or archive creation belongs here.
