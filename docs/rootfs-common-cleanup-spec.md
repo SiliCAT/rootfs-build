@@ -184,7 +184,7 @@ C04.01 暂定保留发行版安装期间生成的 IQN，与软件包版本解耦
 |---|---|---|---|---|
 | C09.01 | `/tmp/`、`/var/tmp/` | EMPTY_DIR | 双 | 为空，保留原有目录权限（含 sticky bit） |
 | C09.02 | `/run/` | VERIFY_ONLY + 精确 REMOVE | 外 | 无构建 PID、socket、锁和实际运行文件；可保留 mmdebstrap/包要求的空目录；不在 T1 递归清理活跃目录 |
-| C09.03 | `/var/log/` 普通日志 | EMPTY_FILE | 双 | 构建日志为空或按包/工具规则不存在；专用 journal 由 C06.07 删除。压缩日志、二进制日志或未知格式须按语义处理，不能一律写成损坏的零字节档案 |
+| C09.03 | `/var/log/` 普通日志 | EMPTY_FILE | 双 | 构建日志为空或按包/工具规则不存在；专用 journal 由 C06.07 删除。压缩日志、二进制日志或未知格式须按语义处理，不能一律写成损坏的零字节档案。systemd 原生 `/var/log/README` 文档链接不属于日志；确认链接文本为发行版标准的 `../../usr/share/doc/systemd/README.logs` 或等价绝对路径后原样 KEEP，允许文档裁剪导致悬空，不跟随或修改目标；其他未知链接仍拒绝 |
 | C09.04 | root 及目标实际用户的 `.bash_history`、`.sh_history`、`.python_history`、`.lesshst`、`.viminfo` | REMOVE | 双 | 指定历史文件不存在；仅在目标内经过验证的用户目录枚举，不递归删除用户配置 |
 | C09.05 | `/var/cache/ldconfig/aux-cache` | REMOVE | 双 | 不存在；保留 `/etc/ld.so.cache` 等运行所需数据 |
 | C09.06 | `/var/crash/` | EMPTY_DIR | 双 | 无构建崩溃转储，保留目录 |

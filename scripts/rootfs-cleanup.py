@@ -265,8 +265,17 @@ class Cleanup:
             return
         for item in self.entries(p):
             rel = str(item.relative_to(self.root))
-            if self.kind(item) == "dir":
+            kind = self.kind(item)
+            if kind == "dir":
                 self.logs(rel)
+            elif rel == "var/log/README" and kind == "link":
+                # systemd-tmpfiles installs this documentation link, not a log.
+                # The target may be absent because of deliberate doc filtering.
+                # Inspect only the link text, never follow it or truncate its target.
+                require(os.readlink(item) in ("../../usr/share/doc/systemd/README.logs",
+                                              "/usr/share/doc/systemd/README.logs"),
+                        "C09.03 unreviewed log README link: " + rel)
+                self.log("C09.03", rel, "KEEP")
             elif rel == "var/log/apt/eipp.log.xz":
                 self.remove("C09.03", rel)
             else:

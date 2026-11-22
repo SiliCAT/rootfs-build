@@ -115,6 +115,54 @@ class CleanupTest(unittest.TestCase):
             self.execute(stage)
             self.assertFalse((self.root / "etc/iscsi/initiatorname.iscsi").exists())
 
+    def test_systemd_log_readme_link_preserved(self):
+        target = self.put("usr/share/doc/systemd/README.logs", "Package documentation\n")
+        readme = self.root / "var/log/README"
+        destination = "../../usr/share/doc/systemd/README.logs"
+        readme.symlink_to(destination)
+        for stage in ("t1", "t2", "verify"):
+            self.execute(stage)
+            self.assertTrue(readme.is_symlink())
+            self.assertEqual(os.readlink(readme), destination)
+            self.assertEqual(target.read_text(), "Package documentation\n")
+        self.assertEqual((self.root / "var/log/test.log").read_bytes(), b"")
+
+    def test_systemd_log_readme_filtered_doc_preserved(self):
+        readme = self.root / "var/log/README"
+        destination = "../../usr/share/doc/systemd/README.logs"
+        readme.symlink_to(destination)
+        for stage in ("t1", "t2", "verify"):
+            self.execute(stage)
+            self.assertTrue(readme.is_symlink())
+            self.assertFalse(readme.exists())
+            self.assertEqual(os.readlink(readme), destination)
+
+    def test_log_readme_unrecognized_link_rejected(self):
+        outside = self.base / "outside-doc"
+        outside.write_text("untouched")
+        readme = self.root / "var/log/README"
+        readme.symlink_to(outside)
+        for stage in ("t1", "t2", "verify"):
+            # Normalize other fixture state before testing read-only mode.
+            if stage == "verify":
+                readme.unlink()
+                self.execute("t2")
+                readme.symlink_to(outside)
+            result = self.execute(stage, 95)
+            self.assertIn("C09.03 unreviewed log README link", result.stderr)
+            self.assertEqual(os.readlink(readme), str(outside))
+            self.assertEqual(outside.read_text(), "untouched")
+
+    def test_other_log_link_still_rejected(self):
+        outside = self.base / "outside-log"
+        outside.write_text("untouched")
+        log = self.root / "var/log/test.log"
+        log.unlink()
+        log.symlink_to(outside)
+        result = self.execute("t2", 95)
+        self.assertIn("expected regular file: var/log/test.log", result.stderr)
+        self.assertEqual(outside.read_text(), "untouched")
+
     def test_unknown_state_and_policy(self):
         p = self.put("etc/hostid", "unreviewed")
         self.execute("t2", 95)
