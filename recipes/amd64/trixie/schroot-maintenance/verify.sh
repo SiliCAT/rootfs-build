@@ -35,9 +35,8 @@ $root_status
 EOF_STATUS
 [ "$password_state" = L ] || fail 'root password must be locked'
 
-policy_status=0
-/usr/sbin/policy-rc.d || policy_status=$?
-[ "$policy_status" -eq 101 ] || fail 'policy-rc.d must exit 101'
+[ ! -e /usr/sbin/policy-rc.d ] && [ ! -L /usr/sbin/policy-rc.d ] ||
+    fail 'build-time policy-rc.d remains; runtime policy belongs to instance initialization'
 
 # Check the target regional settings independently of the builder environment.
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -98,3 +97,6 @@ for directory in /var/lib/apt/lists /tmp /var/tmp; do
 done
 printf '[SCHROOT-MAINTENANCE VERIFY] package, policy and cleanup checks passed\n'
 EOF_CHROOT
+
+RECIPE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+python3 "$RECIPE_DIR/../../../../scripts/rootfs-cleanup.py" verify "$1"

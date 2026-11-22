@@ -25,7 +25,8 @@ scripts/run-target.sh amd64-trixie-schroot-maintenance /build
   `main contrib non-free non-free-firmware`。成品清理索引和缓存，首次使用时运行
   `apt-get update`。关闭翻译索引，保留 Debian 的推荐包安装策略。
 - 构建期裁剪手册、文档和翻译，保留包的版权文件及 `/usr/share/locale/locale.alias`。
-  成品的 `policy-rc.d` 返回 101，供遵循 Debian 服务启动策略的软件包使用。
+  构建期 `policy-rc.d` 返回 101，归档前删除；运行期版本由实例初始化注入。
+  实例初始化完成前不得执行可能触发服务启动的软件包操作。
 - 归档阶段会检查包状态、关键命令、服务策略和构建清理。
 
 ## 区域环境
@@ -38,6 +39,18 @@ scripts/run-target.sh amd64-trixie-schroot-maintenance /build
 `locale.alias`、时区链接、冬夏时区行为及 tzdata 的 zoneinfo 文件完整性。
 schroot 实例的会话环境初始化（例如 profile.d）由部署方负责，不进入母版；
 宿主不应通过 copyfiles 或 bind mount 覆盖母版的时区及 locale 数据。
+
+## 公共清理 C01–C09
+
+遵循 [公共清理技术规范](../../../../docs/rootfs-common-cleanup-spec.md)，无配方专属清理。
+`scripts/rootfs-cleanup.py` 在 builder 上运行，T1 为最后 customize hook，T2 为
+mmdebstrap 返回后的离线兜底；最终 verify 只检查，不修复。清理必须持有由空目录预检签发的本次构建授权记录。不向母版安装清理模块或自制 firstboot。
+所有 APT/DPKG 操作先于 T1 文件清理；保护显式包，严格 update，autoremove、rc purge、clean、audit。
+hostname、machine-id、resolv.conf 均为标准空文件，hosts 统一为 localhost 基线。
+实际部署需由现有会话配置提供 DNS。open-iscsi 2.1.11-1+deb13u2 采用原生
+GenerateName=yes 标记；版本或原生能力不符则失败，不在构建中生成正式 IQN。
+未知或未验证安全语义的配置/状态拒绝发布而非盲删。本配方没有启动镜像；
+遇到启动镜像拒绝放行，待镜像读取器实现后再推广。实际构建及原生 IQN 生成测试仍需验证。
 
 ## sudo
 

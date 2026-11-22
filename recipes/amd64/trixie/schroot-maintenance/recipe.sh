@@ -45,6 +45,12 @@ need_cmd find
 need_cmd chroot
 need_cmd install
 need_cmd mmdebstrap
+need_cmd python3
+
+# Builder-side common implementation; never installed in the target.
+RECIPE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+ROOTFS_CLEANUP=$(realpath -e -- "$RECIPE_DIR/../../../../scripts/rootfs-cleanup.py")
+export ROOTFS_CLEANUP
 
 [ "$(id -u)" -eq 0 ] || die 'this recipe must run as root' 1
 
@@ -61,6 +67,12 @@ TARGET_CONTENTS=$(find "${TARGET_ROOT}" -mindepth 1 -maxdepth 1 -printf x) ||
     die 'cannot inspect TARGET_ROOT' 5
 [ -z "${TARGET_CONTENTS}" ] || die 'TARGET_ROOT must be empty, including hidden entries' 5
 unset TARGET_CONTENTS TARGET_RESOLVED
+
+# The cleanup helper accepts mutation only for this newly validated build root.
+ROOTFS_CLEANUP_LEASE=$(mktemp /tmp/rootfs-cleanup-lease.XXXXXXXX)
+trap 'rm -f -- "$ROOTFS_CLEANUP_LEASE"' 0
+printf '%s' "$TARGET_ROOT" > "$ROOTFS_CLEANUP_LEASE"
+export ROOTFS_CLEANUP_LEASE
 
 # Keep mmdebstrap in the foreground. POSIX sh waits for that command before
 # executing a signal trap, so the recipe cannot exit while its build still runs.
@@ -121,6 +133,18 @@ procps
 psmisc
 lsof'
 
+ROOTFS_REQUIRED_PACKAGES=$PACKAGES
+ROOTFS_BUILD_DPKG_OPTIONS='path-exclude=/usr/share/doc/*
+path-include=/usr/share/doc/*/copyright
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/groff/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/lintian/*
+path-exclude=/usr/share/linda/*
+path-exclude=/usr/share/locale/*
+path-include=/usr/share/locale/locale.alias'
+export ROOTFS_REQUIRED_PACKAGES ROOTFS_BUILD_DPKG_OPTIONS
+
 export DEBIAN_FRONTEND=noninteractive
 components='main contrib non-free non-free-firmware'
 signing='[signed-by=/usr/share/keyrings/debian-archive-keyring.gpg]'
@@ -161,7 +185,8 @@ EOF
     ' \
     --customize-hook='
         set -eu
-        chroot "$1" sh -es <<'"'"'EOF_CHROOT'"'"'
+        set -f
+        chroot "$1" sh -es -- $ROOTFS_REQUIRED_PACKAGES <<'"'"'EOF_CHROOT'"'"'
 export DEBIAN_FRONTEND=noninteractive
 # [LOCALE] Generate and configure the target locale.
 sed -i "s/^[# ]*en_US\.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/" /etc/locale.gen
@@ -175,19 +200,25 @@ dpkg-reconfigure -f noninteractive tzdata
 passwd -dl root
 visudo -cf /etc/sudoers
 
-# Verify the shipped sources using the target CA and archive keyrings.
+# C08: complete all native package actions before T1 file cleanup.
+update-ca-certificates
 apt-get --error-on=any update
+apt-mark manual "$@"
+apt-get autoremove --purge -y
+rc_list=$(mktemp /tmp/rootfs-rc.XXXXXX)
+dpkg-query -W -f='"'"'${db:Status-Abbrev} ${binary:Package}\n'"'"' > "$rc_list"
+awk '"'"'/^rc / {print $2}'"'"' "$rc_list" > "$rc_list.names"
+xargs -r dpkg -P < "$rc_list.names"
+rm -f -- "$rc_list" "$rc_list.names"
 apt-get clean
-
-rm -f /etc/dpkg/dpkg.cfg.d/99mmdebstrap
-install -o 0 -g 0 -m 0644 /dev/null /etc/machine-id
-rm -f /var/lib/dbus/machine-id /var/lib/systemd/random-seed
-for directory in /var/lib/apt/lists /tmp /var/tmp; do
-    find "$directory" -xdev -mindepth 1 -delete
+audit=$(dpkg --audit)
+[ -z "$audit" ] || { printf "%s\n" "$audit" >&2; exit 95; }
+for package do
+    [ "$(dpkg-query -W -f='"'"'${db:Status-Status}'"'"' "$package")" = installed ]
 done
-find /var/log -xdev -type f -exec truncate -s 0 -- {} +
 EOF_CHROOT
     ' \
+    --customize-hook='python3 "$ROOTFS_CLEANUP" t1 "$1"' \
     trixie "${TARGET_ROOT}" \
     "deb $signing $archive trixie $components" \
     "deb-src $signing $archive trixie $components" \
@@ -198,9 +229,7 @@ EOF_CHROOT
     "deb $signing $archive trixie-backports $components" \
     "deb-src $signing $archive trixie-backports $components"
 
-# Install the runtime policy after mmdebstrap restores its build-time policy.
-install -D -o 0 -g 0 -m 0755 /dev/stdin "${TARGET_ROOT}/usr/sbin/policy-rc.d" <<'EOF_POLICY'
-#!/bin/sh
-exit 101
-EOF_POLICY
+# T2: offline file convergence after mmdebstrap returns.
+python3 "$ROOTFS_CLEANUP" t2 "$TARGET_ROOT"
+python3 "$ROOTFS_CLEANUP" verify "$TARGET_ROOT"
 printf '[SCHROOT-MAINTENANCE][DONE] recipe ready: %s\n' "${TARGET_ROOT}"
