@@ -1,6 +1,6 @@
 # Debian Trixie Rootfs 公共身份及状态清理技术规范
 
-版本：v0.2（schroot-maintenance 首个实现，实际构建验收待完成）  
+版本：v0.3（原生 IQN 保留策略；实际构建验收待完成）  
 适用项目：`SiliCAT/rootfs-build`  
 审查基线：`ded9f89e32d3914730a8a39cc83393b634a3bd73`  
 适用范围：memini、schroot-maintenance、vm-dracut、vm-incusd、vm-sandbox、rpi-incusd，以及后续同类 Debian Trixie 母版配方。
@@ -10,7 +10,7 @@
 1. **最大化公共层，最小化专属层。** 所有配方采用同一清理对象目录、原语及验收标准；允许冗余而无害的清理。不得仅因为某配方目前未安装某软件包，就删去相应公共规则。
 2. 公共规则按对象的存在性、文件类型、软件包能力和产物类型执行，不按配方名称分别维护。不存在的可选对象正常 SKIP，不创建无意义的目录和文件。
 3. 公共层包括安全的自动清理，也包括无法安全自动修改的对象的统一检查。后者不等于配方例外。
-4. **母版可以具备软件包原生的首次启动机制，但原则上不得另外创造实例初始化框架。** 不生成正式 hostname、IP、DNS、SSH host keys、IQN、hostid 或实例映射，不新增通用 firstboot 服务。母版中允许保留有明确软件包语义的未初始化标记；不把生成正式身份作为清理动作。
+4. **母版可以具备软件包原生的首次启动机制，但原则上不得另外创造实例初始化框架。** 不生成正式 hostname、IP、DNS、SSH host keys、IQN、hostid 或实例映射，不新增通用 firstboot 服务。母版中允许保留有明确软件包语义的未初始化标记；不把生成正式身份作为清理动作。C04.01 暂时保留软件包原生生成的 IQN（不得据此认定克隆后的身份唯一）。
 5. 保留发行版正常安装数据、包拥有的必要目录及权限、通用配置、区域环境、包用户、内核及合法配方策略。清理对象不是整个 `/etc`、`/var/lib`、`/var/cache`、`/root` 或 `/home`。
 6. 只有无法通过公共规则安全表达的业务才能进入第二层；每个例外必须说明原因、影响范围、最终形态、验收方式及重新审查条件。
 7. 技术规范先于实现。内嵌一致代码块与公共脚本均可采用，但不得改变本规范的对象、动作和最终状态。规范与具体实现分离；本轮以 builder 端公共 Python 模块实现首个配方。
@@ -118,14 +118,14 @@ SSH host keys 的再生成仍由包原生机制或实例部署负责，不新增
 
 | ID | 对象 | 原语 | 时点 | 最终状态 / 验收 |
 |---|---|---|---|---|
-| C04.01 | `/etc/iscsi/initiatorname.iscsi` | RESET_FILE（受版本能力门控） | 双 | 若已确认原生 `GenerateName=yes` 机制可用：root:root 0600，精确内容 `GenerateName=yes` 加换行，无 `InitiatorName=`；未安装包且路径不存在则 SKIP。版本不兼容则失败并专项审查，不擅自生成 IQN |
+| C04.01 | `/etc/iscsi/initiatorname.iscsi` | KEEP（原生保留，不清理） | 双 + 最终验收 | 原样保留软件包生成的文件；不存在则 SKIP。不检查或限定 open-iscsi 版本，不创建、不删除、不重置，不调用生成器。独立 initiator 实例在实际使用前必须由部署方核实并分配唯一身份。 |
 | C04.02 | `/etc/iscsi/iscsid.conf` | VERIFY_ONLY | 双 | 保留通用包配置，检查无实例 CHAP/目标相关覆盖 |
 | C04.03 | `/var/lib/iscsi/nodes/`、旧 `/etc/iscsi/nodes/` | EMPTY_DIR | 双 | 无已发现或配置的目标记录；保留既有必要目录 |
 | C04.04 | `/var/lib/iscsi/{send_targets,static,isns,slp}/` 及旧 `/etc/iscsi/` 对应目录 | EMPTY_DIR（确认包路径适用） | 双 | 无 discovery 记录；不存在则 SKIP |
 | C04.05 | 新旧路径中的 `ifaces/`、`/etc/iscsi/iscsi.initramfs` | VERIFY_ONLY | 双 | 保留通用 iface，禁止构建机 MAC、绑定、固定 target、CHAP 与实例 IQN；不无差别删除默认 iface |
-| C04.06 | 启动镜像中 `/etc/initiatorname.iscsi` 等 iSCSI 配置 | VERIFY_ONLY | 内+最终验收 | 无具体构建 IQN 或连接凭据；允许无此文件或受支持的未初始化标记；镜像不匹配则失败 |
+| C04.06 | 启动镜像中 `/etc/initiatorname.iscsi` 等 iSCSI 配置 | VERIFY_ONLY | 内+最终验收 | 允许软件包原生复制的 IQN（C04.01 的保留例外），禁止构建环境连接凭据及实例专属目标配置；镜像专项验收待实现。iSCSI 根启动的独立身份由部署方负责。 |
 
-C04.01 是对上一轮“删除 IQN 文件”建议的明确修正。此版本依据 Debian Trixie 2.1.11-1+deb13u2 包行为提出候选标准；须完成实际构建与运行验证才可冻结。详见第 7 节。根文件系统需要在 initramfs 阶段通过 iSCSI 建立时，必须单独审查原生启动参数、持久身份及启动镜像部署关系，不因该需求在公共母版写入实际 IQN。
+C04.01 暂定保留发行版安装期间生成的 IQN，与软件包版本解耦。该项是公共层统一保留规则，不是某个配方的专属例外。母版仍不得主动生成正式实例 IQN；多个独立 initiator 不得直接共用克隆所得的 IQN。
 
 ### C05 — 本地存储设备身份
 
@@ -201,7 +201,7 @@ memini、vm-incusd、vm-sandbox 暂无已确认必须保留的独有清理规则
 ## 6. 启动产物与最终验收
 
 - 对存在的 initramfs-tools、dracut 产物按实际类型读取；对 Raspberry Pi 检查 `/boot/firmware` 的副本和 cmdline。没有启动镜像的 schroot 正常 SKIP。
-- 检查所有实际内核版本的最终启动镜像，不只最后一个内核。不得含构建 IQN、hostname、hostid、ZFS 池缓存、固化 builder 设备 UUID、网络地址、启动参数或认证信息。不要求所有配置文件均不存在，允许合法通用配置和已验证的占位。
+- 检查所有实际内核版本的最终启动镜像，不只最后一个内核。允许 C04.01 所规定的原生 IQN 保留例外；不得含构建 hostname、hostid、ZFS 池缓存、固化 builder 设备 UUID、网络地址、启动参数或认证信息。不要求所有配置文件均不存在，允许合法通用配置和已验证的占位。
 - 对比根目录清理后的状态、镜像内数据及固件副本。验收工具只读；如需重新生成镜像，应修正 T1 的构建顺序而不是 T2 自行重建。
 - 每条规则产生明确的 PASS / SKIP / FAIL 证据。SKIP 只适用于声明为可选、实际不存在或类型不适用的对象；未实施的必需检查不是 SKIP。
 - 最终验收失败不得发布归档。`verify-rootfs.sh` 的目录与挂载检查继续保留；独立 `verify.sh` 或 memini 现有内嵌验收应承担业务检查。memini 新增独立 verify.sh 仍为后续专项。
@@ -213,22 +213,22 @@ memini、vm-incusd、vm-sandbox 暂无已确认必须保留的独有清理规则
 
 2026-11-21 只读 schroot 母版中有具体 `InitiatorName`；母版自产的 `open-iscsi.postinst` 第 21、23 行指向该文件与 `iscsi-iname`。Debian Trixie 的 2.1.11-1+deb13u2 源码确认：首次 configure 且身份文件尚不存在时，由 postinst 直接生成并写入 IQN，权限 0600。该操作不需要连接 target 或启动 iscsid，故 `policy-rc.d` 不会阻止它；当前不能据此断言构建过程运行过 iSCSI 服务，也没有证据表明 IQN 来自 builder 文件复制。
 
-同一版本原生 `startup-checks.sh` 在缺少 NAMEFILE 时失败，在文件包含 `GenerateName=yes` 时生成并写入真实 IQN；`iscsid.service` 在 ExecStartPre 执行该检查。因此，保留未初始化标记比删除文件更符合目前的包语义。不应另造 firstboot 服务。
+同一版本原生 `startup-checks.sh` 在缺少 NAMEFILE 时失败，在文件包含 `GenerateName=yes` 时生成并写入真实 IQN；`iscsid.service` 在 ExecStartPre 执行该检查。这是历史兼容机制的调查结论，不作为当前构建要求。不应另造 firstboot 服务。
 
 ### 7.2 initramfs 边界
 
 该版本 initramfs-tools hook 默认会复制 `/etc/iscsi/initiatorname.iscsi` 到镜像中的 `/etc/initiatorname.iscsi`（除非按原生配置禁用相应 hook），也可能复制 `iscsi.initramfs`。所以五个已有启动镜像的配方必须实际审核镜像，不能只检查最终 rootfs。当地实际包 hook 的 `cp` 行也与该源码一致。
 
-`local-top/iscsi` 使用显式 `iscsi_initiator=` 或相应配置中的身份；没有显式身份时读取镜像中的 InitiatorName；iBFT auto 路径另有行为。它不会调用正式系统的 startup-checks 来解释 GenerateName=yes。因而标记文件不能代替从 iSCSI 根启动所需的有效身份。禁止为规避这一点在共用镜像里复制真实 IQN。
+`local-top/iscsi` 使用显式 `iscsi_initiator=` 或相应配置中的身份；没有显式身份时读取镜像中的 InitiatorName；iBFT auto 路径另有行为。它不会调用正式系统的 startup-checks 来解释 GenerateName=yes。因而标记文件不能代替从 iSCSI 根启动所需的有效身份。允许软件包原生复制 IQN，但实例启动前必须确认早期启动身份与独立实例配置一致。
 
-C04.01 应在最后一次镜像生成之前收敛，T2 再离线核对，确保未被包操作改回。保留普通系统的原生启动能力；如某部署需要显式早期启动 IQN，作为该部署条件另行审查，不向公共母版加入初始化框架。
+C04.01 不再要求在镜像生成前重置 IQN，T1/T2 均不改写该文件。需要独立 iSCSI 身份（包括早期启动）时，部署方另行审查并按需调用发行版原生工具；不向公共母版加入初始化框架。
 
 ### 7.3 版本与待验收事项
 
-- 现有只读母版已通过 dpkg-query 实测为 2.1.11-1+deb13u2。当前实现仅允许这一经过源码审查的版本，并核对实际启动检查脚本及原生生成工具；版本变化先失败再复审。
-- Debian unstable 的 2.1.13-1 变更记录已明确移除历史 GenerateName 逻辑。因此不得把此标记写法当成跨 Debian 版本永久接口。每次包版本改变时核验启动检查能力，旧规则不再支持就阻止发布并重新讨论。
-- 在两个隔离的可写测试实例中测试原生生成：初始均为标记；分别执行包原生启动检查（不需要连接 target），确保生成合法、不同的 IQN、权限 0600；二次执行不改变既有 IQN；另测试缺失文件的失败路径。实际 schroot 中共享宿主内核，不应为测试而启动可能影响宿主的 iSCSI daemon。
-- 逐个检查具备启动镜像的真实产物，确认无具体 IQN；对于需从 iSCSI 根启动的业务另行测试。测试不修改只读母版或已经运行的 initiator，避免改变已部署 ACL 对应身份。
+- 现有只读母版已实测为 2.1.11-1+deb13u2；该版本仅是调查依据，不设构建版本门槛。
+- Debian unstable 的 2.1.13-1 移除了历史 GenerateName 逻辑；因此不再将该标记、启动脚本路径或原生生成器能力作为构建放行条件。
+- 如部署业务需要独立 initiator，另行测试发行版原生身份生成工具以及持久化行为；无需在公共构建过程中生成身份。
+- 逐个检查具备启动镜像的产物时，允许 C04.01 原生 IQN 保留例外，仍检查其他构建残留与凭据。不修改已上线 initiator 的 IQN，避免影响 ACL。
 
 ## 8. 实物取证及当前审阅状态
 
@@ -240,7 +240,7 @@ C04.01 应在最后一次镜像生成之前收敛，T2 再离线核对，确保�
 | resolv.conf | Docker 生成、10.0.0.2、AWS 内部 search domain | 必须清除 |
 | hosts | 四行 localhost 通用基线 | 符合 C01.02 |
 | machine-id / D-Bus / random-seed / hostid | 空文件或不存在 | 当前正常 |
-| iSCSI InitiatorName | 具体 IQN | C04.01 新增公共规则，版本及运行待复验 |
+| iSCSI InitiatorName | 具体 IQN | C04.01 暂定原样保留；独立实例启用前处理 |
 | mdadm.conf | HOMEHOST `<system>`、MAILADDR root，无 ARRAY；有生成时间注释 | 通用配置正常；时间戳是否去除属可重复构建专项，不是身份污染 |
 | fstab | UNCONFIGURED FSTAB FOR BASE SYSTEM 注释 | 正常 |
 | crypttab | 无活动条目 | 正常（不能断言文件一定存在） |
@@ -281,5 +281,5 @@ C04.01 应在最后一次镜像生成之前收敛，T2 再离线核对，确保�
 - 已定案文件规则实际执行；hostid、zpool.cache、system.devices、非空 NFS state/etab/rmtab 等待验证对象仍以保守 VERIFY_ONLY 覆盖。发现未知有效网络/凭据/服务配置先阻止发布，不静默删改。当前只认可首个配方已经审查的默认内容，未来应扩充经确认的通用配置规则，而不是为配方制造例外。
 - 当前清理器对 /run 采用外部空目录结构验收；非空未知运行对象失败。APT 原生 clean 后检查下载缓存，构建专用 dpkg 片段内容匹配传入选项才删除，保留持久 APT 片段。
 - 当前无需启动镜像；如果存在 initrd/initramfs 或 firmware，清理器明确拒绝放行，而非假装已实现镜像内审计。完整的 initramfs/firmware 读取器是推广其他五个配方的前置条件。
-- `tests/test_rootfs_cleanup.py` 提供 fixture 回归测试。实际 GitHub Actions 构建、归档检查、部署后 DNS 与运行期 policy-rc.d、两个隔离实例原生 IQN 行为仍须验收；单元测试不能替代实际构建。
+- `tests/test_rootfs_cleanup.py` 提供 fixture 回归测试。实际 GitHub Actions 构建、归档检查、部署后 DNS 与运行期 policy-rc.d及适用的实例身份仍须验收；单元测试不能替代实际构建。
 

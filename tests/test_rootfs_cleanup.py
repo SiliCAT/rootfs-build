@@ -91,18 +91,29 @@ class CleanupTest(unittest.TestCase):
         self.execute("t2", 95)
         self.assertEqual(list(outside_dir.iterdir()), [])
 
-    def test_iscsi_marker_and_version(self):
+    def test_iscsi_native_identity_preserved_across_versions(self):
         p = self.root / "var/lib/dpkg/status"
-        p.write_text(p.read_text() + "Package: open-iscsi\nStatus: install ok installed\nVersion: 2.1.11-1+deb13u2\n\n")
-        self.put("usr/lib/open-iscsi/startup-checks.sh", "GenerateName=yes\niscsi-iname\nInitiatorName=\n")
-        self.put("usr/sbin/iscsi-iname", "#!/bin/sh\n").chmod(0o755)
-        q = self.put("etc/iscsi/initiatorname.iscsi", "InitiatorName=iqn.example:old\n")
-        self.execute("t2")
-        self.execute("verify")
-        self.assertEqual(q.read_text(), "GenerateName=yes\n")
-        self.assertEqual(q.stat().st_mode & 0o777, 0o600)
-        p.write_text(p.read_text().replace("2.1.11-1+deb13u2", "2.1.13-1"))
-        self.execute("t2", 95)
+        original = p.read_text()
+        q = self.put("etc/iscsi/initiatorname.iscsi",
+                     "# package-generated identity\nInitiatorName=iqn.example:old\n")
+        q.chmod(0o600)
+        expected = q.read_bytes()
+        metadata = (q.stat().st_uid, q.stat().st_gid, q.stat().st_mode, q.stat().st_mtime_ns)
+        for version in ("2.1.11-1+deb13u2", "2.1.13-1", "99.0-1"):
+            with self.subTest(version=version):
+                p.write_text(original + "Package: open-iscsi\nStatus: install ok installed\nVersion: " + version + "\n\n")
+                self.execute("t1")
+                self.execute("t2")
+                self.execute("verify")
+                self.assertEqual(q.read_bytes(), expected)
+                self.assertEqual((q.stat().st_uid, q.stat().st_gid, q.stat().st_mode, q.stat().st_mtime_ns), metadata)
+
+    def test_iscsi_missing_identity_not_created(self):
+        p = self.root / "var/lib/dpkg/status"
+        p.write_text(p.read_text() + "Package: open-iscsi\nStatus: install ok installed\nVersion: 99.0-1\n\n")
+        for stage in ("t1", "t2", "verify"):
+            self.execute(stage)
+            self.assertFalse((self.root / "etc/iscsi/initiatorname.iscsi").exists())
 
     def test_unknown_state_and_policy(self):
         p = self.put("etc/hostid", "unreviewed")

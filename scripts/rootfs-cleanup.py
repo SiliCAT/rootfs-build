@@ -16,7 +16,6 @@ import tempfile
 
 HOSTS = b"127.0.0.1       localhost\n::1             localhost ip6-localhost ip6-loopback\nff02::1         ip6-allnodes\nff02::2         ip6-allrouters\n"
 POLICY = b"#!/bin/sh\nexit 101\n"
-IQN = b"GenerateName=yes\n"
 FRAGMENT = "etc/dpkg/dpkg.cfg.d/99mmdebstrap"
 HISTORY = (".bash_history", ".sh_history", ".python_history", ".lesshst", ".viminfo")
 
@@ -324,18 +323,14 @@ class Cleanup:
         self.inspect_file("C03.05", "etc/apt/auth.conf", lambda lines: not lines)
         self.inspect_tree("C03.05", "etc/apt/auth.conf.d", lambda lines: not lines)
 
-        # C04: version + capability gate; never start an iSCSI service.
+        # C04.01: keep the package-generated initiator identity unchanged.
+        # Clones must not use a shared IQN as independent initiators.
+        # Instance provisioning owns any identity assignment before iSCSI use.
         name = "etc/iscsi/initiatorname.iscsi"
-        if "open-iscsi" in packages:
-            script = self.text(self.path("usr/lib/open-iscsi/startup-checks.sh"))
-            require(packages["open-iscsi"] == "2.1.11-1+deb13u2" and
-                    all(token in script for token in ("GenerateName=yes", "iscsi-iname", "InitiatorName=")),
-                    "C04.01 unreviewed open-iscsi version or startup capability")
-            require(self.regular(self.path("usr/sbin/iscsi-iname")).st_mode & 0o111,
-                    "C04.01 native generator missing")
-            self.reset("C04.01", name, IQN, 0o600, True)
+        if self.kind(self.path(name)) is None:
+            self.log("C04.01", name, "SKIP")
         else:
-            self.absent("C04.01", name)
+            self.log("C04.01", name + " (native identity retained; review at deployment)", "KEEP")
 
         def iscsi_config(lines):
             for line in lines:

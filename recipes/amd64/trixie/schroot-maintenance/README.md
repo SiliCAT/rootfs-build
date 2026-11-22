@@ -47,10 +47,11 @@ schroot 实例的会话环境初始化（例如 profile.d）由部署方负责�
 mmdebstrap 返回后的离线兜底；最终 verify 只检查，不修复。清理必须持有由空目录预检签发的本次构建授权记录。不向母版安装清理模块或自制 firstboot。
 所有 APT/DPKG 操作先于 T1 文件清理；保护显式包，严格 update，autoremove、rc purge、clean、audit。
 hostname、machine-id、resolv.conf 均为标准空文件，hosts 统一为 localhost 基线。
-实际部署需由现有会话配置提供 DNS。open-iscsi 2.1.11-1+deb13u2 采用原生
-GenerateName=yes 标记；版本或原生能力不符则失败，不在构建中生成正式 IQN。
+实际部署需由现有会话配置提供 DNS。open-iscsi 原生生成的 initiatorname.iscsi
+暂时原样保留，不限制软件包版本，不重置或生成 IQN。独立 initiator 必须在实际使用前
+由实例部署方确认唯一身份，不能直接共用从母版继承的 IQN。
 未知或未验证安全语义的配置/状态拒绝发布而非盲删。本配方没有启动镜像；
-遇到启动镜像拒绝放行，待镜像读取器实现后再推广。实际构建及原生 IQN 生成测试仍需验证。
+遇到启动镜像拒绝放行，待镜像读取器实现后再推广。实际构建及相应实例部署仍需验证。
 
 ## sudo
 
